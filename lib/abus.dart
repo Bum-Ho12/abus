@@ -1,4 +1,4 @@
-// lib/abus.dart - Enhanced export
+// lib/abus.dart
 import 'package:abus/core/abus_definition.dart';
 import 'package:abus/core/abus_manager.dart';
 import 'package:abus/core/abus_result.dart';
