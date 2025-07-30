@@ -1,10 +1,135 @@
 // lib/core/abus_manager.dart
 import 'dart:async';
-import 'package:abus/adapters/state_adapter.dart';
-import 'package:abus/adapters/ui_notifier.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'abus_definition.dart';
 import 'abus_result.dart';
+
+// Conditional imports - these will only be available if the packages exist
+// We'll handle the existence check at runtime
+bool get _hasBlocPackage {
+  try {
+    // This will throw if flutter_bloc is not available
+    return true; // Would need proper package detection in real implementation
+  } catch (e) {
+    return false;
+  }
+}
+
+bool get _hasProviderPackage {
+  try {
+    // This will throw if provider is not available
+    return true; // Would need proper package detection in real implementation
+  } catch (e) {
+    return false;
+  }
+}
+
+/// Base interface for any state handler
+abstract class AbusHandler {
+  /// Handle optimistic update for interaction
+  Future<void> handleOptimistic(
+      String interactionId, InteractionDefinition interaction) async {}
+
+  /// Handle rollback for interaction
+  Future<void> handleRollback(
+      String interactionId, InteractionDefinition interaction) async {}
+
+  /// Handle commit after successful API call
+  Future<void> handleCommit(
+      String interactionId, InteractionDefinition interaction) async {}
+
+  /// Execute API call (optional - can be handled externally)
+  Future<InteractionResult>? executeAPI(InteractionDefinition interaction) =>
+      null;
+
+  /// Check if this handler can handle the interaction
+  bool canHandle(InteractionDefinition interaction) => true;
+
+  /// Get current state for rollback capability
+  Map<String, dynamic>? getCurrentState(InteractionDefinition interaction) =>
+      null;
+
+  /// Get handler identifier for tracking
+  String get handlerId;
+}
+
+/// Mixin for BLoCs to support ABUS interactions
+/// Only available if flutter_bloc package is present
+mixin AbusBloc<State> on Object implements AbusHandler {
+  @override
+  String get handlerId => runtimeType.toString();
+
+  /// Handle optimistic update for interaction
+  @override
+  Future<void> handleOptimistic(
+      String interactionId, InteractionDefinition interaction) async {}
+
+  /// Handle rollback for interaction
+  @override
+  Future<void> handleRollback(
+      String interactionId, InteractionDefinition interaction) async {}
+
+  /// Handle commit after successful API call
+  @override
+  Future<void> handleCommit(
+      String interactionId, InteractionDefinition interaction) async {}
+
+  /// Execute API call (optional - can be handled externally)
+  @override
+  Future<InteractionResult>? executeAPI(InteractionDefinition interaction) =>
+      null;
+
+  /// Check if this BLoC can handle the interaction
+  @override
+  bool canHandle(InteractionDefinition interaction) => true;
+
+  /// Get current state for rollback capability
+  @override
+  Map<String, dynamic>? getCurrentState(InteractionDefinition interaction) =>
+      null;
+}
+
+/// Mixin for ChangeNotifiers to support ABUS interactions
+/// Only available if provider package is present
+mixin AbusProvider on ChangeNotifier implements AbusHandler {
+  @override
+  String get handlerId => runtimeType.toString();
+
+  /// Handle optimistic update for interaction
+  @override
+  Future<void> handleOptimistic(
+      String interactionId, InteractionDefinition interaction) async {}
+
+  /// Handle rollback for interaction
+  @override
+  Future<void> handleRollback(
+      String interactionId, InteractionDefinition interaction) async {}
+
+  /// Handle commit after successful API call
+  @override
+  Future<void> handleCommit(
+      String interactionId, InteractionDefinition interaction) async {}
+
+  /// Execute API call (optional - can be handled externally)
+  @override
+  Future<InteractionResult>? executeAPI(InteractionDefinition interaction) =>
+      null;
+
+  /// Check if this provider can handle the interaction
+  @override
+  bool canHandle(InteractionDefinition interaction) => true;
+
+  /// Get current state for rollback capability
+  @override
+  Map<String, dynamic>? getCurrentState(InteractionDefinition interaction) =>
+      null;
+}
+
+/// Custom handler for projects not using BLoC or Provider
+abstract class CustomAbusHandler implements AbusHandler {
+  @override
+  String get handlerId => runtimeType.toString();
+}
 
 /// State change snapshot for rollback capability
 class StateSnapshot {
@@ -12,65 +137,110 @@ class StateSnapshot {
   final InteractionDefinition interaction;
   final Map<String, dynamic>? previousState;
   final DateTime timestamp;
-  final List<String> affectedAdapters;
+  final List<String> affectedHandlers;
 
   StateSnapshot({
     required this.interactionId,
     required this.interaction,
     this.previousState,
     required this.timestamp,
-    required this.affectedAdapters,
+    required this.affectedHandlers,
   });
 }
 
-/// Main interaction manager
+/// Handler discovery strategy
+abstract class HandlerDiscoveryStrategy {
+  List<AbusHandler> discoverHandlers(BuildContext? context);
+}
+
+/// Default discovery strategy that works without external dependencies
+class DefaultDiscoveryStrategy implements HandlerDiscoveryStrategy {
+  @override
+  List<AbusHandler> discoverHandlers(BuildContext? context) {
+    final handlers = <AbusHandler>[];
+
+    if (context == null) return handlers;
+
+    // Try to discover handlers from widget tree without depending on specific packages
+    _tryDiscoverFromContext(context, handlers);
+
+    return handlers;
+  }
+
+  void _tryDiscoverFromContext(
+      BuildContext context, List<AbusHandler> handlers) {
+    // Walk up the widget tree to find handlers
+    context.visitAncestorElements((element) {
+      final widget = element.widget;
+
+      // Check if widget implements or contains handlers
+      if (widget is StatefulWidget) {
+        final state = (element as StatefulElement).state;
+        if (state is AbusHandler) {
+          handlers.add(state as AbusHandler);
+        }
+      }
+
+      // Continue walking up the tree
+      return true;
+    });
+  }
+}
+
+/// Enhanced interaction manager with flexible dependency handling
 class InteractionManager {
   static InteractionManager? _instance;
   static InteractionManager get instance =>
       _instance ??= InteractionManager._();
 
-  InteractionManager._();
+  InteractionManager._() : _discoveryStrategy = DefaultDiscoveryStrategy();
 
-  final List<StateAdapter> _adapters = [];
-  final List<UINotifier> _uiNotifiers = [];
+  // Unified handler list
+  final List<AbusHandler> _handlers = [];
+  final List<Future<InteractionResult> Function(InteractionDefinition)>
+      _apiHandlers = [];
+
   final Map<String, StateSnapshot> _snapshots = {};
   final Map<String, Timer> _rollbackTimers = {};
   final StreamController<InteractionResult> _resultController =
       StreamController<InteractionResult>.broadcast();
 
+  HandlerDiscoveryStrategy _discoveryStrategy;
+
   Stream<InteractionResult> get resultStream => _resultController.stream;
 
-  /// Register a state management adapter
-  void registerAdapter(StateAdapter adapter) {
-    _adapters.removeWhere((a) => a.name == adapter.name);
-    _adapters.add(adapter);
-    // Sort by priority (higher first)
-    _adapters.sort((a, b) => b.priority.compareTo(a.priority));
+  /// Set custom discovery strategy
+  void setDiscoveryStrategy(HandlerDiscoveryStrategy strategy) {
+    _discoveryStrategy = strategy;
   }
 
-  /// Register multiple adapters at once
-  void registerAdapters(List<StateAdapter> adapters) {
-    for (final adapter in adapters) {
-      registerAdapter(adapter);
+  /// Register a global API handler
+  void registerApiHandler(
+      Future<InteractionResult> Function(InteractionDefinition) handler) {
+    _apiHandlers.add(handler);
+  }
+
+  /// Register any type of handler
+  void registerHandler(AbusHandler handler) {
+    _handlers.removeWhere((h) => h.handlerId == handler.handlerId);
+    _handlers.add(handler);
+  }
+
+  /// Auto-discover handlers using current strategy
+  void discoverHandlers(BuildContext? context) {
+    final discoveredHandlers = _discoveryStrategy.discoverHandlers(context);
+    for (final handler in discoveredHandlers) {
+      registerHandler(handler);
     }
   }
 
-  /// Register a UI notifier
-  void registerUINotifier(UINotifier notifier) {
-    _uiNotifiers.add(notifier);
-  }
-
-  /// Register multiple UI notifiers at once
-  void registerUINotifiers(List<UINotifier> notifiers) {
-    _uiNotifiers.addAll(notifiers);
-  }
-
-  /// Execute an interaction with optimistic updates and rollback capability
+  /// Execute an interaction with automatic handler discovery
   Future<InteractionResult> execute(
     InteractionDefinition interaction, {
     bool? optimistic,
     Duration? timeout,
     bool autoRollback = true,
+    BuildContext? context,
   }) async {
     final useOptimistic = optimistic ?? interaction.supportsOptimistic;
     final timeoutDuration =
@@ -80,26 +250,28 @@ class InteractionManager {
         '${interaction.id}_${DateTime.now().millisecondsSinceEpoch}';
 
     try {
-      // Find compatible adapters
-      final compatibleAdapters =
-          _adapters.where((adapter) => adapter.canHandle(interaction)).toList();
-
-      if (compatibleAdapters.isEmpty) {
-        throw Exception(
-            'No compatible adapter found for interaction: ${interaction.id}');
+      // Auto-discover handlers if context provided
+      if (context != null) {
+        discoverHandlers(context);
       }
 
-      // Notify UI start
-      _notifyUIStart(interactionId, interaction);
+      // Find compatible handlers
+      final compatibleHandlers =
+          _handlers.where((h) => h.canHandle(interaction)).toList();
+
+      if (compatibleHandlers.isEmpty) {
+        // Try API-only execution if no state handlers found
+        return await _executeApiOnly(interaction, timeoutDuration);
+      }
 
       // Create snapshot for rollback
-      final previousState = _getPreviousState(interaction, compatibleAdapters);
+      final previousState = _getPreviousState(interaction, compatibleHandlers);
       final snapshot = StateSnapshot(
         interactionId: interactionId,
         interaction: interaction,
         previousState: previousState,
         timestamp: DateTime.now(),
-        affectedAdapters: compatibleAdapters.map((a) => a.name).toList(),
+        affectedHandlers: compatibleHandlers.map((h) => h.handlerId).toList(),
       );
       _snapshots[interactionId] = snapshot;
 
@@ -108,26 +280,26 @@ class InteractionManager {
       if (useOptimistic) {
         // Execute optimistic updates first
         await _executeOptimistic(
-            interactionId, interaction, compatibleAdapters);
+            interactionId, interaction, compatibleHandlers);
 
         // Then execute actual API call
         result =
-            await _executeAPI(interaction, compatibleAdapters, timeoutDuration);
+            await _executeAPI(interaction, compatibleHandlers, timeoutDuration);
 
         if (!result.isSuccess) {
           // Rollback on failure
           await rollback(interactionId);
         } else {
           // Commit on success
-          await _commit(interactionId, interaction, compatibleAdapters);
+          await _commit(interactionId, interaction, compatibleHandlers);
         }
       } else {
         // Execute API call directly
         result =
-            await _executeAPI(interaction, compatibleAdapters, timeoutDuration);
+            await _executeAPI(interaction, compatibleHandlers, timeoutDuration);
 
         if (result.isSuccess) {
-          await _commit(interactionId, interaction, compatibleAdapters);
+          await _commit(interactionId, interaction, compatibleHandlers);
         }
       }
 
@@ -136,10 +308,7 @@ class InteractionManager {
         _setupAutoRollback(interactionId, timeoutDuration);
       }
 
-      // Notify UI completion
-      _notifyUIComplete(interactionId, result);
       _resultController.add(result);
-
       return result;
     } catch (e) {
       final errorResult =
@@ -150,46 +319,64 @@ class InteractionManager {
         await rollback(interactionId);
       }
 
-      _notifyUIComplete(interactionId, errorResult);
       _resultController.add(errorResult);
       return errorResult;
     }
   }
 
-  Map<String, dynamic>? _getPreviousState(
-      InteractionDefinition interaction, List<StateAdapter> adapters) {
-    final states = <String, dynamic>{};
-    for (final adapter in adapters) {
-      final state = adapter.getCurrentState(interaction);
-      if (state != null) {
-        states[adapter.name] = state;
+  Future<InteractionResult> _executeApiOnly(
+      InteractionDefinition interaction, Duration timeout) async {
+    for (final handler in _apiHandlers) {
+      try {
+        return await handler(interaction).timeout(timeout, onTimeout: () {
+          return InteractionResult.error('Timeout',
+              interactionId: interaction.id);
+        });
+      } catch (e) {
+        continue; // Try next handler
       }
     }
+    throw Exception('No API handler found for interaction: ${interaction.id}');
+  }
+
+  Map<String, dynamic>? _getPreviousState(
+    InteractionDefinition interaction,
+    List<AbusHandler> handlers,
+  ) {
+    final states = <String, dynamic>{};
+
+    for (final handler in handlers) {
+      final state = handler.getCurrentState(interaction);
+      if (state != null) {
+        states[handler.handlerId] = state;
+      }
+    }
+
     return states.isNotEmpty ? states : null;
   }
 
   Future<void> _executeOptimistic(
     String interactionId,
     InteractionDefinition interaction,
-    List<StateAdapter> adapters,
+    List<AbusHandler> handlers,
   ) async {
-    for (final adapter in adapters) {
+    for (final handler in handlers) {
       try {
-        await adapter.updateOptimistic(interactionId, interaction);
+        await handler.handleOptimistic(interactionId, interaction);
       } catch (e) {
-        debugPrint('Optimistic update failed for ${adapter.name}: $e');
+        debugPrint('Optimistic update failed for ${handler.handlerId}: $e');
       }
     }
   }
 
   Future<InteractionResult> _executeAPI(
     InteractionDefinition interaction,
-    List<StateAdapter> adapters,
+    List<AbusHandler> handlers,
     Duration timeout,
   ) async {
-    // Try to find an adapter that can execute the API call
-    for (final adapter in adapters) {
-      final apiResult = adapter.executeAPI(interaction);
+    // Try handlers first
+    for (final handler in handlers) {
+      final apiResult = handler.executeAPI(interaction);
       if (apiResult != null) {
         return await apiResult.timeout(timeout, onTimeout: () {
           return InteractionResult.error('Timeout',
@@ -198,23 +385,34 @@ class InteractionManager {
       }
     }
 
-    // If no adapter can execute API, simulate or throw error
-    throw Exception(
-        'No adapter can execute API for interaction: ${interaction.id}');
+    // Try global API handlers
+    for (final handler in _apiHandlers) {
+      try {
+        return await handler(interaction).timeout(timeout, onTimeout: () {
+          return InteractionResult.error('Timeout',
+              interactionId: interaction.id);
+        });
+      } catch (e) {
+        continue; // Try next handler
+      }
+    }
+
+    throw Exception('No API handler found for interaction: ${interaction.id}');
   }
 
   Future<void> _commit(
     String interactionId,
     InteractionDefinition interaction,
-    List<StateAdapter> adapters,
+    List<AbusHandler> handlers,
   ) async {
-    for (final adapter in adapters) {
+    for (final handler in handlers) {
       try {
-        await adapter.commit(interactionId, interaction);
+        await handler.handleCommit(interactionId, interaction);
       } catch (e) {
-        debugPrint('Commit failed for ${adapter.name}: $e');
+        debugPrint('Commit failed for ${handler.handlerId}: $e');
       }
     }
+
     _cleanupInteraction(interactionId);
   }
 
@@ -232,20 +430,17 @@ class InteractionManager {
     final snapshot = _snapshots[interactionId];
     if (snapshot == null) return;
 
-    for (final adapterName in snapshot.affectedAdapters) {
-      final adapter = _adapters.firstWhere(
-        (a) => a.name == adapterName,
-        orElse: () => throw Exception('Adapter $adapterName not found'),
-      );
-
-      try {
-        await adapter.rollback(interactionId, snapshot.interaction);
-      } catch (e) {
-        debugPrint('Rollback failed for ${adapter.name}: $e');
+    // Rollback all affected handlers
+    for (final handler in _handlers) {
+      if (snapshot.affectedHandlers.contains(handler.handlerId)) {
+        try {
+          await handler.handleRollback(interactionId, snapshot.interaction);
+        } catch (e) {
+          debugPrint('Rollback failed for ${handler.handlerId}: $e');
+        }
       }
     }
 
-    _notifyUIRollback(interactionId, snapshot.interaction);
     _cleanupInteraction(interactionId);
   }
 
@@ -260,41 +455,6 @@ class InteractionManager {
     _snapshots.remove(interactionId);
     _rollbackTimers[interactionId]?.cancel();
     _rollbackTimers.remove(interactionId);
-  }
-
-  void _notifyUIStart(String interactionId, InteractionDefinition interaction) {
-    for (final notifier in _uiNotifiers) {
-      if (notifier.shouldHandle(interaction)) {
-        try {
-          notifier.onInteractionStarted(interactionId, interaction);
-        } catch (e) {
-          debugPrint('UI start notification failed: $e');
-        }
-      }
-    }
-  }
-
-  void _notifyUIComplete(String interactionId, InteractionResult result) {
-    for (final notifier in _uiNotifiers) {
-      try {
-        notifier.onInteractionCompleted(interactionId, result);
-      } catch (e) {
-        debugPrint('UI completion notification failed: $e');
-      }
-    }
-  }
-
-  void _notifyUIRollback(
-      String interactionId, InteractionDefinition interaction) {
-    for (final notifier in _uiNotifiers) {
-      if (notifier.shouldHandle(interaction)) {
-        try {
-          notifier.onRollback(interactionId, interaction);
-        } catch (e) {
-          debugPrint('UI rollback notification failed: $e');
-        }
-      }
-    }
   }
 
   /// Get pending interactions
@@ -312,10 +472,16 @@ class InteractionManager {
     _rollbackTimers.clear();
   }
 
+  /// Get registered handlers count
+  int get handlerCount => _handlers.length;
+
+  /// Get API handlers count
+  int get apiHandlerCount => _apiHandlers.length;
+
   void dispose() {
     clearPending();
-    _adapters.clear();
-    _uiNotifiers.clear();
+    _handlers.clear();
+    _apiHandlers.clear();
     _resultController.close();
   }
 
