@@ -4,26 +4,6 @@ import 'package:flutter/material.dart';
 import 'abus_definition.dart';
 import 'abus_result.dart';
 
-// Conditional imports - these will only be available if the packages exist
-// We'll handle the existence check at runtime
-bool get _hasBlocPackage {
-  try {
-    // This will throw if flutter_bloc is not available
-    return true; // Would need proper package detection in real implementation
-  } catch (e) {
-    return false;
-  }
-}
-
-bool get _hasProviderPackage {
-  try {
-    // This will throw if provider is not available
-    return true; // Would need proper package detection in real implementation
-  } catch (e) {
-    return false;
-  }
-}
-
 /// Base interface for any state handler
 abstract class AbusHandler {
   /// Handle optimistic update for interaction
@@ -188,12 +168,11 @@ class DefaultDiscoveryStrategy implements HandlerDiscoveryStrategy {
 }
 
 /// Enhanced interaction manager with flexible dependency handling
-class InteractionManager {
-  static InteractionManager? _instance;
-  static InteractionManager get instance =>
-      _instance ??= InteractionManager._();
+class ABUSManager {
+  static ABUSManager? _instance;
+  static ABUSManager get instance => _instance ??= ABUSManager._();
 
-  InteractionManager._() : _discoveryStrategy = DefaultDiscoveryStrategy();
+  ABUSManager._() : _discoveryStrategy = DefaultDiscoveryStrategy();
 
   // Unified handler list
   final List<AbusHandler> _handlers = [];

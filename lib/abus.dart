@@ -9,7 +9,7 @@ export 'core/abus_definition.dart';
 
 /// Convenience class for common operations
 class ABUS {
-  static InteractionManager get manager => InteractionManager.instance;
+  static ABUSManager get manager => ABUSManager.instance;
 
   /// Quick execution without context
   static Future<InteractionResult> execute(InteractionDefinition interaction) {
