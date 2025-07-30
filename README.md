@@ -1,54 +1,115 @@
-<!--
-This README describes the package. If you publish this package to pub.dev,
-this README's contents appear on the landing page for your package.
 
-For information about how to write a good package README, see the guide for
-[writing package pages](https://dart.dev/tools/pub/writing-package-pages).
+# ABus - Action Bus Interaction Manager
 
-For general information about developing packages, see the Dart guide for
-[creating packages](https://dart.dev/guides/libraries/create-packages)
-and the Flutter guide for
-[developing packages and plugins](https://flutter.dev/to/develop-packages).
--->
+ABus (Action Bus) is a flexible interaction manager designed to orchestrate UI state changes, API interactions, optimistic updates, and rollback capabilities across BLoC, Provider, or any custom state management system.
 
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
+## Features
 
+- Define interactions with validation, priority, tags, and rollback logic.
+- Auto-discover state handlers from context (BLoC, Provider, or custom).
+- Supports optimistic updates and timed rollback.
+- Register multiple API handlers.
+- Lightweight and no external dependency requirements.
 
-TODO: List what your package can do. Maybe include images, gifs, or videos.
+## Installation
 
-## Getting started
+1. Clone or copy the `abus` package folder into your `packages` directory or local project path.
+2. In your `pubspec.yaml`:
 
-TODO: List prerequisites and provide or point to information on how to
-start using the package.
+```
+dependencies:
+  abus:
+    path: ../relative/path/to/abus
+```
 
 ## Usage
 
-TODO: Include short and useful examples for package users. Add longer examples
-to `/example` folder.
+### 1. Define an interaction
 
 ```dart
-const like = 'sample';
+final interaction = GenericInteraction(
+  id: 'create_post',
+  data: {'title': 'My post', 'content': 'Hello'},
+);
 ```
 
-## Additional information
+Or use the builder:
 
-TODO: Tell users more about the package: where to find more information, how to
-contribute to the package, how to file issues, what response they can expect
-from the package authors, and more.
+```dart
+final interaction = ABUS.builder()
+  .withId('create_post')
+  .addData('title', 'My post')
+  .addData('content', 'Hello')
+  .withOptimistic(true)
+  .build();
+```
 
-## Features
-                ┌────────────────────────────┐
-                │      InteractionManager     │  <-- Abstracts coordination
-                └────────────┬───────────────┘
-                             │
-         ┌──────────────────┼──────────────────┐
-         ▼                  ▼                  ▼
-  StateAdapter         UINotifier         APIExecutor (optional)
-  (BLoC, Riverpod,     (Toast, Dialogs)    (to handle remote sync)
-  Provider, etc.)
+### 2. Register API handler
 
-                ↑                        ↑
-        ┌───────┴────────┐     ┌────────┴────────┐
-        │ InteractionDef │     │ InteractionResult│
-        └────────────────┘     └─────────────────┘
+```dart
+ABUS.registerApiHandler((interaction) async {
+  // Handle API call here
+  return InteractionResult.success(data: {'status': 'ok'});
+});
+```
+
+### 3. Register state handler (BLoC or Provider)
+
+Your BLoC or ChangeNotifier must mix in `AbusBloc` or `AbusProvider`:
+
+```dart
+class PostBloc extends Cubit<PostState> with AbusBloc<PostState> {
+  @override
+  Future<void> handleOptimistic(String id, interaction) async {
+    // Apply temporary state change
+  }
+
+  @override
+  Future<void> handleRollback(String id, interaction) async {
+    // Revert state
+  }
+
+  @override
+  Future<void> handleCommit(String id, interaction) async {
+    // Commit state permanently
+  }
+}
+```
+
+Then register it:
+
+```dart
+ABUS.registerHandler(postBloc);
+```
+
+### 4. Execute interaction
+
+```dart
+final result = await ABUS.execute(interaction);
+
+if (result.isSuccess) {
+  print('Success!');
+} else {
+  print('Failed: ${result.error}');
+}
+```
+
+Or use context-based execution:
+
+```dart
+final result = await ABUS.executeWith(interaction, context);
+```
+
+## Use Cases
+
+- Optimistic UI updates with rollback support.
+- Centralized handling of all interaction types (create, update, delete, sync).
+- Works with or without a state management library.
+
+## License
+
+MIT
+
+---
+
+Built for flexibility and power. Perfect for any app needing rich user interaction handling.
