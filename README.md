@@ -1,34 +1,24 @@
-# ABUS 🚀
+# ABUS - Asynchronous Business Logic Unification System
 
 [![pub package](https://img.shields.io/pub/v/abus.svg)](https://pub.dev/packages/abus)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Flutter](https://img.shields.io/badge/Flutter-3.0%2B-blue.svg)](https://flutter.dev)
 
-**Advanced Business User State** - A Flutter package for managing complex user interactions with optimistic updates, automatic rollbacks, and seamless API integration.
+A unified Flutter package for handling asynchronous operations with built-in optimistic updates, automatic rollback, and seamless state management integration.
 
-## ✨ Features
+## Key Features
 
-- 🚀 **Optimistic Updates** - Immediate UI feedback without waiting for API responses
-- 🔄 **Automatic Rollbacks** - Smart recovery when API calls fail
-- ⚡ **State Management Agnostic** - Works with BLoC, Provider, or custom solutions
-- 🎯 **Interaction Queue** - Prevents race conditions with priority-based execution
-- 📊 **Real-time Results** - Stream-based result broadcasting to widgets
-- 🛡️ **Memory Efficient** - Built-in memory management and cleanup
-- 🧪 **Testing Friendly** - Easy to mock and test interactions
+- 🚀 **Optimistic Updates** - Instant UI responses with automatic rollback on failure
+- 🔄 **Universal Integration** - Works with BLoC, Provider, setState, or any state management
+- 🛡️ **Race Condition Prevention** - Intelligent operation queuing
+- 📱 **Widget Reactive Updates** - Automatic UI updates based on operation results
+- 🎯 **Type-Safe Operations** - Define operations once, use everywhere
+- 🔧 **Zero Boilerplate** - Minimal setup, maximum functionality
+- 📊 **Built-in Analytics** - Operation tracking and error monitoring
 
-## 🎯 Perfect For
-
-- **Collaborative Apps** - Real-time editing with conflict resolution
-- **Social Media** - Instant likes, comments, and posts
-- **E-commerce** - Cart updates, wishlist management
-- **Productivity Tools** - Document editing, task management
-- **Any app requiring immediate feedback** with reliable backend sync
-
-## 🚀 Quick Start
+## Quick Start
 
 ### Installation
-
-Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
@@ -40,74 +30,37 @@ dependencies:
 ```dart
 import 'package:abus/abus.dart';
 
-// 1. Create an interaction
-final interaction = ABUS.builder()
-  .withId('update_profile')
-  .withData({'name': 'John Doe', 'email': 'john@example.com'})
-  .build();
+// 1. Define what you want to do
+final interaction = InteractionTypes.crud(
+  action: 'create',
+  resourceType: 'user',
+  payload: {'name': 'John', 'email': 'john@example.com'},
+);
 
-// 2. Execute with optimistic updates
+// 2. Execute with automatic optimistic updates
 final result = await ABUS.execute(interaction);
 
+// 3. Handle result
 if (result.isSuccess) {
-  print('Profile updated successfully!');
+  print('User created: ${result.data}');
 } else {
   print('Error: ${result.error}');
 }
 ```
 
-### With BLoC Integration
-
-```dart
-class ProfileBloc extends Bloc<ProfileEvent, ProfileState> 
-    with AbusBloc<ProfileState> {
-  
-  @override
-  Future<void> handleOptimistic(String interactionId, InteractionDefinition interaction) async {
-    // Update UI immediately
-    if (interaction.id == 'update_profile') {
-      final data = interaction.toJson()['data'];
-      add(UpdateProfileOptimistic(data['name']));
-    }
-  }
-
-  @override
-  Future<void> handleRollback(String interactionId, InteractionDefinition interaction) async {
-    // Revert changes if API fails
-    add(RollbackProfileUpdate());
-  }
-
-  @override
-  Future<ABUSResult> executeAPI(InteractionDefinition interaction) async {
-    // Make API call
-    try {
-      final result = await profileApi.update(interaction.toJson()['data']);
-      return ABUSResult.success(data: result);
-    } catch (e) {
-      return ABUSResult.error(e.toString());
-    }
-  }
-}
-
-// Register the handler
-ABUS.registerHandler(ProfileBloc());
-```
-
 ### Widget Integration
 
 ```dart
-class ProfileWidget extends StatefulWidget {
+class UserList extends StatefulWidget {
   @override
-  _ProfileWidgetState createState() => _ProfileWidgetState();
+  _UserListState createState() => _UserListState();
 }
 
-class _ProfileWidgetState extends State<ProfileWidget> 
-    with AbusWidgetMixin {
-  
+class _UserListState extends State<UserList> with AbusWidgetMixin {
   @override
   AbusUpdateConfig get abusConfig => AbusUpdateConfig(
-    tags: {'profile'},
-    rebuildOnError: true,
+    tags: {'user'}, // Only listen to user-related operations
+    rebuildOnSuccess: true,
   );
 
   @override
@@ -119,206 +72,247 @@ class _ProfileWidgetState extends State<ProfileWidget>
     }
   }
 
+  void createUser() {
+    executeInteraction(InteractionTypes.crud(
+      action: 'create',
+      resourceType: 'user',
+      payload: {'name': 'New User'},
+    ));
+  }
+}
+```
+
+### State Management Integration
+
+#### With BLoC
+```dart
+class UserBloc extends Bloc<UserEvent, UserState> with AbusBloc<UserState> {
+  @override
+  bool canHandle(InteractionDefinition interaction) {
+    return interaction.toJson()['data']?['resourceType'] == 'user';
+  }
+
+  @override
+  Future<void> handleOptimistic(String interactionId, InteractionDefinition interaction) async {
+    // Update state immediately
+    final data = interaction.toJson()['data'];
+    if (data['action'] == 'create') {
+      emit(state.copyWith(users: [...state.users, User.fromJson(data['payload'])]));
+    }
+  }
+
+  @override
+  Future<ABUSResult> executeAPI(InteractionDefinition interaction) async {
+    // Your API call
+    return await userRepository.execute(interaction);
+  }
+
+  @override
+  Future<void> handleRollback(String interactionId, InteractionDefinition interaction) async {
+    // Revert changes if API fails
+    emit(previousState);
+  }
+}
+```
+
+#### With Provider
+```dart
+class UserProvider extends ChangeNotifier with AbusProvider {
+  List<User> _users = [];
+  List<User> get users => _users;
+
+  @override
+  bool canHandle(InteractionDefinition interaction) {
+    return interaction.toJson()['data']?['resourceType'] == 'user';
+  }
+
+  @override
+  Future<void> handleOptimistic(String interactionId, InteractionDefinition interaction) async {
+    final data = interaction.toJson()['data'];
+    if (data['action'] == 'create') {
+      _users.add(User.fromJson(data['payload']));
+      notifyListeners();
+    }
+  }
+
+  @override
+  Future<ABUSResult> executeAPI(InteractionDefinition interaction) async {
+    return await userRepository.execute(interaction);
+  }
+}
+```
+
+## Advanced Features
+
+### Custom Interactions
+```dart
+final customInteraction = ABUS.builder()
+  .withId('sync_user_preferences')
+  .addData('userId', user.id)
+  .addData('includeSettings', true)
+  .withTimeout(Duration(seconds: 30))
+  .withPriority(1) // High priority
+  .addTag('sync')
+  .addTag('background')
+  .build();
+
+final result = await ABUS.execute(customInteraction);
+```
+
+### Manual Rollback Control
+```dart
+final result = await ABUS.execute(interaction, autoRollback: false);
+
+if (result.isSuccess) {
+  // Show success message
+  showSuccess('Operation completed');
+  ABUS.manager.confirmSuccess(result.interactionId!);
+} else {
+  // Show retry option
+  final retry = await showRetryDialog();
+  if (!retry) {
+    await ABUS.manager.rollback(result.interactionId!);
+  }
+}
+```
+
+### Global API Handler
+```dart
+void main() {
+  // Register global API handler
+  ABUS.registerApiHandler((interaction) async {
+    final dio = Dio();
+    final data = interaction.toJson()['data'];
+
+    try {
+      final response = await dio.post('/api/${data['resourceType']}', data: data);
+      return ABUSResult.success(data: response.data);
+    } catch (e) {
+      return ABUSResult.error(e.toString());
+    }
+  });
+
+  runApp(MyApp());
+}
+```
+
+## Real-World Example
+
+```dart
+class TodoApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return ElevatedButton(
-      onPressed: () async {
-        final interaction = ABUS.builder()
-          .withId('update_profile')
-          .withData({'name': 'Updated Name'})
-          .build();
-          
-        await executeInteraction(interaction);
-      },
-      child: Text('Update Profile'),
+    return MaterialApp(
+      home: TodoList(),
+    );
+  }
+}
+
+class TodoList extends StatefulWidget {
+  @override
+  _TodoListState createState() => _TodoListState();
+}
+
+class _TodoListState extends State<TodoList> with AbusWidgetMixin {
+  @override
+  AbusUpdateConfig get abusConfig => AbusUpdateConfig(
+    tags: {'todo'},
+    debounceDelay: Duration(milliseconds: 300),
+  );
+
+  void addTodo(String title) {
+    executeInteraction(InteractionTypes.crud(
+      action: 'create',
+      resourceType: 'todo',
+      payload: {'title': title, 'completed': false},
+    ));
+  }
+
+  void toggleTodo(String id, bool completed) {
+    executeInteraction(InteractionTypes.crud(
+      action: 'update',
+      resourceType: 'todo',
+      resourceId: id,
+      payload: {'completed': completed},
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('Todos')),
+      body: Consumer<TodoProvider>(
+        builder: (context, provider, child) {
+          return ListView.builder(
+            itemCount: provider.todos.length,
+            itemBuilder: (context, index) {
+              final todo = provider.todos[index];
+              return CheckboxListTile(
+                title: Text(todo.title),
+                value: todo.completed,
+                onChanged: (value) => toggleTodo(todo.id, value ?? false),
+              );
+            },
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => addTodo('New Todo'),
+        child: Icon(Icons.add),
+      ),
     );
   }
 }
 ```
 
-## 🔧 How It Works
+## Configuration
 
-1. **Optimistic Update**: UI updates immediately when interaction is triggered
-2. **Background API**: API call executes asynchronously
-3. **Smart Recovery**: If API fails, changes are automatically rolled back
-4. **Confirmation**: Successful API calls confirm the optimistic changes
-
-```
-User Action → Optimistic Update → API Call → Success/Rollback
-     ↓              ↓               ↓            ↓
-   Instant       UI Updates    Background    Final State
-  Feedback                                      
-```
-
-## 🎨 Advanced Features
-
-### Custom Interactions
-
+### Memory Management
 ```dart
-class CreatePostInteraction extends InteractionDefinition {
-  final String title;
-  final String content;
+// ABUS automatically manages memory, but you can configure limits
+ABUSManager.instance.dispose(); // Clean up when done
 
-  CreatePostInteraction({required this.title, required this.content});
-
-  @override
-  String get id => 'create_post';
-  
-  @override
-  Map<String, dynamic> toJson() => {'title': title, 'content': content};
-  
-  @override
-  bool validate() => title.isNotEmpty && content.isNotEmpty;
-}
+// Or reset for testing
+ABUSManager.reset();
 ```
 
-### Priority-Based Execution
-
+### Error Handling
 ```dart
-final urgentUpdate = ABUS.builder()
-  .withId('emergency_save')
-  .withPriority(100)  // Higher priority
-  .withData(criticalData)
-  .build();
-```
-
-### Global API Handler
-
-```dart
-ABUS.registerApiHandler((interaction) async {
-  switch (interaction.id) {
-    case 'sync_data':
-      return await syncService.sync();
-    case 'upload_file':
-      return await fileService.upload(interaction.toJson()['data']);
-    default:
-      throw Exception('Unknown interaction: ${interaction.id}');
+// Listen to all operation results
+ABUS.manager.resultStream.listen((result) {
+  if (!result.isSuccess) {
+    analytics.recordError(result.error);
+    crashlytics.recordError(result.error);
   }
 });
 ```
 
-## 📖 State Management Support
+<!-- ## Migration
 
-| Pattern      | Support  | Mixin               |
-| ------------ | -------- | ------------------- |
-| **BLoC**     | ✅ Full   | `AbusBloc<State>`   |
-| **Provider** | ✅ Full   | `AbusProvider`      |
-| **Riverpod** | ✅ Custom | `CustomAbusHandler` |
-| **GetX**     | ✅ Custom | `CustomAbusHandler` |
-| **Custom**   | ✅ Full   | `CustomAbusHandler` |
+ABUS is designed to be incrementally adoptable:
 
-## 🧪 Testing
+1. **Start Small**: Wrap a single API call in an interaction
+2. **Add Optimistic Updates**: Implement handlers for immediate UI feedback
+3. **Expand Gradually**: Migrate more operations as you see the benefits
+4. **Full Integration**: Use AbusWidgetMixin for automatic UI updates
 
-```dart
-testWidgets('Profile update interaction', (tester) async {
-  final mockHandler = MockProfileHandler();
-  ABUS.registerHandler(mockHandler);
-  
-  final interaction = ABUS.builder()
-    .withId('update_profile')
-    .withData({'name': 'Test User'})
-    .build();
+## Documentation
 
-  final result = await ABUS.execute(interaction);
-  
-  expect(result.isSuccess, isTrue);
-  verify(mockHandler.handleOptimistic(any, any)).called(1);
-});
-```
+- 📖 [Full Documentation](https://github.com/Bum-Ho12/abus/blob/main/DOCs.md)
+- 🎯 [API Reference](https://pub.dev/documentation/abus/latest/)
+- 💡 [Examples](https://github.com/yourusername/abus/tree/main/example)
+- 🐛 [Issues](https://github.com/yourusername/abus/issues)
 
-## 📚 Documentation
-
-- **[Complete Documentation](DOCS.md)** - Comprehensive guide with examples
-- **[API Reference](https://pub.dev/documentation/abus)** - Detailed API documentation
-- **[Migration Guide](DOCS.md#migration-guide)** - Migrate from existing solutions
-- **[Best Practices](DOCS.md#best-practices)** - Recommended usage patterns
-
-## 🤔 Why ABUS?
-
-### Traditional Approach 😓
-```dart
-// User clicks button
-showLoading();
-try {
-  final result = await api.updateProfile(data);
-  hideLoading();
-  updateUI(result);
-} catch (e) {
-  hideLoading();
-  showError(e);
-}
-// User waits... and waits... 😴
-```
-
-### ABUS Approach 🚀
-```dart
-// User clicks button
-final result = await ABUS.execute(updateInteraction);
-// UI updates INSTANTLY! ⚡
-// API handles in background
-// Auto-rollback if needed
-```
-
-## 🔄 Migration
-
-### From setState
-```dart
-// Before
-setState(() {
-  isLoading = true;
-});
-try {
-  await api.update();
-  setState(() {
-    isLoading = false;
-    // update state
-  });
-} catch (e) {
-  setState(() {
-    isLoading = false;
-    error = e.toString();
-  });
-}
-
-// After
-await ABUS.execute(updateInteraction);
-// That's it! 🎉
-```
-
-## 🏆 Examples
-
-Check out our example apps:
-
-- **[Todo App](example/todo_app)** - Simple task management with optimistic updates
-- **[Chat App](example/chat_app)** - Real-time messaging with BLoC
-- **[E-commerce](example/ecommerce)** - Shopping cart with Provider
-- **[Collaborative Editor](example/editor)** - Document editing with conflict resolution
-
-## 🤝 Contributing
+## Contributing
 
 We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Support
-
-- 📖 [Documentation](DOCS.md)
-- 🐛 [Issue Tracker](https://github.com/yourorg/abus/issues)
-- 💬 [Discussions](https://github.com/yourorg/abus/discussions)
-- 📧 Email: support@yourorg.com
-
-## ⭐ Show Your Support
-
-If ABUS helps you build better Flutter apps, please give it a star! ⭐
-
 ---
 
-**Made with ❤️ for the Flutter community**
+**Made with ❤️ by the Flutter community**
+
+*ABUS - Because async operations shouldn't be async-ward* 😄 -->
