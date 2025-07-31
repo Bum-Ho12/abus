@@ -1,193 +1,272 @@
-# ABUS (Asynchronous Business Unified System) Documentation
+# ABUS - Asynchronous Business Logic Unification System
 
 ## Overview
 
-ABUS is a Flutter package that provides a unified architecture for handling asynchronous interactions with optimistic updates, automatic rollback capabilities, and flexible state management integration. It abstracts the complexity of coordinating UI updates with API calls while providing reliable error handling and recovery mechanisms.
+ABUS (Asynchronous Business Logic Unification System) is a comprehensive Flutter package that provides a unified approach to handling asynchronous operations, state management, and API interactions with built-in optimistic updates, rollback capabilities, and error handling.
 
-## Core Concepts
+## Core Concept
 
-### What Problem Does ABUS Solve?
+ABUS implements an **optimistic-first architecture** where:
+1. UI updates happen immediately (optimistic updates)
+2. API calls execute in the background
+3. Changes are automatically rolled back if the API fails
+4. Success confirmations prevent rollbacks
 
-In modern Flutter applications, developers frequently face challenges with:
+This approach provides excellent user experience while maintaining data consistency.
 
-1. **Optimistic Updates**: Updating the UI immediately while API calls execute in the background
-2. **Error Recovery**: Rolling back UI changes when API calls fail
-3. **State Coordination**: Managing multiple state management solutions (BLoC, Provider, etc.) consistently
-4. **Timeout Handling**: Gracefully handling long-running operations
-5. **Interaction Prioritization**: Managing the execution order of multiple concurrent operations
+## Key Features
 
-ABUS provides a centralized system that handles these concerns automatically while remaining agnostic to your chosen state management approach.
+### 🚀 Optimistic Updates
+- Immediate UI feedback without waiting for API responses
+- Automatic rollback on API failures
+- Configurable rollback timeouts
 
-## Architecture Components
+### 🔄 State Management Integration
+- Works with BLoC, Provider, and custom state management solutions
+- Mixin-based approach for easy integration
+- Automatic widget rebuilds on interaction results
 
-### 1. InteractionDefinition
+### ⚡ Interaction Queue
+- Prevents race conditions with automatic queuing
+- Priority-based execution
+- Duplicate interaction prevention
 
-The foundation of ABUS is the `InteractionDefinition` abstract class, which represents any business operation that might require state updates and API calls.
+### 🎯 Flexible Handler System
+- Multiple handler types (BLoC, Provider, Custom)
+- Global and local API handlers
+- Handler-specific validation and execution
+
+### 📊 Result Streaming
+- Real-time interaction result broadcasting
+- Filterable result streams
+- Debounced widget updates
+
+## Core Architecture
+
+### 1. Interaction Definitions (`InteractionDefinition`)
+The foundation of ABUS - defines what operation should be performed.
 
 ```dart
 abstract class InteractionDefinition {
-  String get id;                          // Unique identifier
-  Map<String, dynamic> toJson();         // Serialization
-  InteractionDefinition? createRollback(); // Optional rollback definition
-  Duration? get timeout;                  // Operation timeout
-  bool get supportsOptimistic;           // Optimistic update support
-  int get priority;                      // Execution priority
-  Set<String> get tags;                  // Categorization tags
-  bool validate();                       // Validation logic
-  List<String> getValidationErrors();    // Validation error details
+  String get id;                    // Unique identifier
+  Map<String, dynamic> toJson();    // Serialization
+  InteractionDefinition? createRollback();  // Optional rollback definition
+  Duration? get timeout;            // Operation timeout
+  bool get supportsOptimistic;      // Optimistic update support
+  int get priority;                 // Execution priority
+  Set<String> get tags;             // Categorization tags
 }
 ```
 
 **Key Features:**
-- **Immutable Design**: Interactions are defined once and executed multiple times
-- **Validation**: Built-in validation with detailed error reporting
+- **Immutable Operations**: Each interaction is a complete description of an operation
+- **Self-Contained**: Includes all necessary data and metadata
 - **Rollback Support**: Optional rollback definitions for complex operations
-- **Prioritization**: Priority-based execution ordering
-- **Tagging**: Flexible categorization system for filtering and organization
+- **Priority System**: High-priority operations execute first
+- **Tagging**: Categorize operations for filtering and handling
 
-### 2. GenericInteraction
-
-A concrete implementation of `InteractionDefinition` for common use cases:
-
-```dart
-final interaction = GenericInteraction(
-  id: 'update_user_profile',
-  data: {
-    'userId': '123',
-    'name': 'John Doe',
-    'email': 'john@example.com'
-  },
-  timeout: Duration(seconds: 10),
-  supportsOptimistic: true,
-  priority: 1,
-  tags: {'user', 'profile', 'update'}
-);
-```
-
-### 3. InteractionBuilder
-
-A fluent builder pattern for creating interactions:
-
-```dart
-final interaction = InteractionBuilder()
-  .withId('create_post')
-  .addData('title', 'My New Post')
-  .addData('content', 'Post content here')
-  .withTimeout(Duration(seconds: 15))
-  .withOptimistic(true)
-  .addTag('post')
-  .addTag('create')
-  .build();
-```
-
-### 4. AbusHandler Interface
-
-The `AbusHandler` interface defines how different components of your application can participate in the ABUS system:
+### 2. Handler System (`AbusHandler`)
+Handles the actual execution of interactions across different state management patterns.
 
 ```dart
 abstract class AbusHandler {
-  String get handlerId;                   // Unique handler identifier
-
-  // Lifecycle methods
+  String get handlerId;
+  bool canHandle(InteractionDefinition interaction);
   Future<void> handleOptimistic(String interactionId, InteractionDefinition interaction);
   Future<void> handleRollback(String interactionId, InteractionDefinition interaction);
   Future<void> handleCommit(String interactionId, InteractionDefinition interaction);
-
-  // API execution
-  Future<InteractionResult>? executeAPI(InteractionDefinition interaction);
-
-  // Handler capabilities
-  bool canHandle(InteractionDefinition interaction);
+  Future<ABUSResult>? executeAPI(InteractionDefinition interaction);
   Map<String, dynamic>? getCurrentState(InteractionDefinition interaction);
 }
 ```
 
 **Handler Types:**
-
 - **AbusBloc**: Mixin for BLoC pattern integration
 - **AbusProvider**: Mixin for Provider pattern integration
-- **CustomAbusHandler**: Base class for custom implementations
+- **CustomAbusHandler**: For custom state management solutions
 
-### 5. ABUSManager
+### 3. Manager (`ABUSManager`)
+The central orchestrator that coordinates all operations.
 
-The central orchestrator that coordinates all interactions:
-
-```dart
-class ABUSManager {
-  // Singleton instance
-  static ABUSManager get instance;
-
-  // Core execution method
-  Future<InteractionResult> execute(
-    InteractionDefinition interaction, {
-    bool? optimistic,
-    Duration? timeout,
-    bool autoRollback = true,
-    BuildContext? context,
-  });
-
-  // Handler management
-  void registerHandler(AbusHandler handler);
-  void registerApiHandler(Future<InteractionResult> Function(InteractionDefinition) handler);
-  void discoverHandlers(BuildContext? context);
-
-  // Rollback control
-  Future<void> rollback(String interactionId);
-  void confirmSuccess(String interactionId);
-
-  // Status monitoring
-  List<String> get pendingInteractions;
-  bool isPending(String interactionId);
-  Stream<InteractionResult> get resultStream;
-}
-```
-
-
+**Core Responsibilities:**
+- **Handler Registration**: Manages all registered handlers
+- **Operation Queuing**: Prevents race conditions through intelligent queuing
+- **State Snapshots**: Captures state before operations for rollback capability
+- **Memory Management**: Automatic cleanup of old snapshots and timers
+- **Result Broadcasting**: Streams results to interested components
 
 ## Execution Flow
 
-### Standard Execution Flow
+### Standard Flow
+1. **Define Interaction**: Create an `InteractionDefinition` describing the operation
+2. **Handler Discovery**: Manager finds compatible handlers
+3. **State Snapshot**: Current state captured for potential rollback
+4. **Optimistic Update**: UI updated immediately (if enabled)
+5. **API Execution**: Actual API call performed
+6. **Success/Failure Handling**:
+   - **Success**: Changes committed, snapshot cleaned up
+   - **Failure**: Automatic rollback to previous state
 
-1. **Handler Discovery**: ABUS discovers compatible handlers for the interaction
-2. **State Snapshot**: Current state is captured for potential rollback
-3. **Optimistic Update** (if enabled): UI is updated immediately
-4. **API Execution**: Actual API call is made
-5. **Result Processing**:
-   - **Success**: Changes are committed, rollback timer is set/cancelled
-   - **Failure**: Optimistic changes are rolled back
-
-### Rollback Mechanisms
-
-ABUS provides multiple rollback triggers:
-
-1. **Automatic Rollback**: Based on timeout configuration
-2. **Manual Rollback**: Explicit rollback calls
-3. **Error Rollback**: Automatic rollback on API failures
-
+### Optimistic Updates Flow
 ```dart
-// Manual rollback
-manager.rollback(interactionId);
+// 1. User triggers action
+final interaction = InteractionTypes.crud(
+  action: 'update',
+  resourceType: 'user',
+  resourceId: '123',
+  payload: {'name': 'New Name'},
+);
 
-// Confirm success to prevent auto-rollback
-manager.confirmSuccess(interactionId);
+// 2. Immediate UI update
+await ABUS.execute(interaction);
+// UI shows "New Name" immediately
+
+// 3. If API fails, automatic rollback
+// UI reverts to previous state
 ```
 
-## State Management Integration
+## Key Features
 
-### BLoC Integration
+### 🚀 Optimistic Updates
+- **Immediate UI Response**: Users see changes instantly
+- **Automatic Rollback**: Failed operations automatically revert
+- **State Preservation**: Previous state captured and restored perfectly
+- **Configurable**: Can be disabled per interaction or globally
 
+### 🔒 Race Condition Prevention
+- **Operation Queuing**: Prevents concurrent operations with same ID
+- **Priority System**: Important operations execute first
+- **Timeout Handling**: Operations that take too long are automatically handled
+
+### 🎯 Flexible Handler System
+- **Multi-Pattern Support**: Works with BLoC, Provider, setState, or custom patterns
+- **Handler Discovery**: Automatic discovery of handlers in widget tree
+- **Manual Registration**: Explicit handler registration for better control
+
+### 📊 Memory Management
+- **Snapshot Limits**: Automatic cleanup of old state snapshots
+- **Timer Management**: Automatic cleanup of rollback timers
+- **Resource Cleanup**: Proper disposal prevents memory leaks
+
+### 🔍 Comprehensive Result System
 ```dart
-class UserBloc extends Bloc with AbusBloc {
+class ABUSResult {
+  final bool isSuccess;
+  final Map<String, dynamic>? data;
+  final String? error;
+  final DateTime timestamp;
+  final String? interactionId;
+  final Map<String, dynamic>? metadata;
+}
+```
+
+## Usage Examples
+
+### Basic CRUD Operations
+```dart
+// Create
+final createUser = InteractionTypes.crud(
+  action: 'create',
+  resourceType: 'user',
+  payload: {'name': 'John', 'email': 'john@example.com'},
+);
+
+// Update with optimistic updates
+final updateUser = InteractionTypes.crud(
+  action: 'update',
+  resourceType: 'user',
+  resourceId: '123',
+  payload: {'name': 'Jane'},
+  optimistic: true,
+);
+
+// Execute
+final result = await ABUS.execute(updateUser);
+```
+
+### Custom Interactions
+```dart
+final customInteraction = ABUS.builder()
+  .withId('sync_user_data')
+  .addData('userId', '123')
+  .addData('includePreferences', true)
+  .withTimeout(Duration(seconds: 30))
+  .withPriority(1)
+  .addTag('sync')
+  .addTag('critical')
+  .build();
+
+final result = await ABUS.execute(customInteraction);
+```
+
+### Widget Integration
+```dart
+class UserProfile extends StatefulWidget {
+  @override
+  _UserProfileState createState() => _UserProfileState();
+}
+
+class _UserProfileState extends State<UserProfile> with AbusWidgetMixin {
+  @override
+  AbusUpdateConfig get abusConfig => AbusUpdateConfig(
+    tags: {'user', 'profile'},
+    debounceDelay: Duration(milliseconds: 300),
+    rebuildOnSuccess: true,
+  );
+
+  @override
+  void onAbusResult(ABUSResult result) {
+    if (!result.isSuccess) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: ${result.error}')),
+      );
+    }
+  }
+
+  void updateUser() {
+    final interaction = InteractionTypes.crud(
+      action: 'update',
+      resourceType: 'user',
+      payload: {'name': newName},
+    );
+
+    executeInteraction(interaction);
+  }
+}
+```
+
+### Handler Implementation
+```dart
+class UserBloc extends Bloc<UserEvent, UserState> with AbusBloc {
   @override
   bool canHandle(InteractionDefinition interaction) {
-    return interaction.tags.contains('user');
+    return interaction.toJson()['data']?['resourceType'] == 'user';
   }
 
   @override
   Future<void> handleOptimistic(String interactionId, InteractionDefinition interaction) async {
-    if (interaction.id.startsWith('update_user')) {
-      // Apply optimistic update to state
+    final data = interaction.toJson()['data'] as Map<String, dynamic>;
+
+    if (data['action'] == 'update') {
+      // Update state optimistically
+      final updatedUser = state.user.copyWith(name: data['payload']['name']);
       emit(state.copyWith(user: updatedUser));
+    }
+  }
+
+  @override
+  Future<ABUSResult> executeAPI(InteractionDefinition interaction) async {
+    final data = interaction.toJson()['data'] as Map<String, dynamic>;
+
+    try {
+      final response = await userRepository.updateUser(
+        data['resourceId'],
+        data['payload'],
+      );
+
+      return ABUSResult.success(data: response);
+    } catch (e) {
+      return ABUSResult.error(e.toString());
     }
   }
 
@@ -196,227 +275,179 @@ class UserBloc extends Bloc with AbusBloc {
     // Revert to previous state
     emit(previousState);
   }
-
-  @override
-  Future<InteractionResult> executeAPI(InteractionDefinition interaction) async {
-    // Make actual API call
-    final result = await userRepository.updateUser(interaction.data);
-    return InteractionResult.success(data: result);
-  }
 }
 ```
 
-### Provider Integration
+## Configuration Options
 
+### Global Configuration
 ```dart
-class UserProvider extends ChangeNotifier with AbusProvider {
-  User? _user;
-  User? _previousUser;
+void main() {
+  // Register global API handlers
+  ABUS.registerApiHandler((interaction) async {
+    // Global API handling logic
+    return await apiService.execute(interaction);
+  });
 
-  @override
-  Future<void> handleOptimistic(String interactionId, InteractionDefinition interaction) async {
-    _previousUser = _user;
-    _user = User.fromJson(interaction.data);
-    notifyListeners();
-  }
-
-  @override
-  Future<void> handleRollback(String interactionId, InteractionDefinition interaction) async {
-    _user = _previousUser;
-    notifyListeners();
-  }
+  runApp(MyApp());
 }
+```
+
+### Per-Widget Configuration
+```dart
+@override
+AbusUpdateConfig get abusConfig => AbusUpdateConfig(
+  interactionIds: {'user_update', 'profile_sync'},
+  tags: {'critical'},
+  rebuildOnSuccess: true,
+  rebuildOnError: true,
+  rebuildOnRollback: true,
+  debounceDelay: Duration(milliseconds: 200),
+  onlyWhenVisible: true,
+  customFilter: (result) => result.metadata?['priority'] == 'high',
+);
 ```
 
 ## Advanced Features
 
-### Handler Discovery
-
-ABUS can automatically discover handlers from the Flutter widget tree:
-
+### Manual Rollback Control
 ```dart
-// Automatic discovery
-final result = await ABUS.executeWith(interaction, context);
+// Execute with manual rollback control
+final result = await ABUS.execute(interaction, autoRollback: false);
 
-// Manual discovery
-manager.discoverHandlers(context);
+if (result.isSuccess) {
+  // Confirm success to prevent auto-rollback
+  ABUS.manager.confirmSuccess(result.interactionId!);
+} else {
+  // Manual rollback if needed
+  await ABUS.manager.rollback(result.interactionId!);
+}
 ```
 
 ### Priority-Based Execution
-
-Interactions with higher priority values execute first:
-
 ```dart
-final highPriorityInteraction = InteractionBuilder()
+final highPriorityInteraction = ABUS.builder()
   .withId('critical_update')
   .withPriority(10)  // Higher priority
   .build();
 
-final lowPriorityInteraction = InteractionBuilder()
+final lowPriorityInteraction = ABUS.builder()
   .withId('background_sync')
   .withPriority(1)   // Lower priority
   .build();
+
+// High priority executes first even if queued later
 ```
 
-### Result Streaming
-
-Monitor all interaction results:
-
+### Result Stream Monitoring
 ```dart
-manager.resultStream.listen((result) {
-  if (result.isSuccess) {
-    // Handle success
-  } else {
-    // Handle error
+ABUS.manager.resultStream.listen((result) {
+  if (!result.isSuccess) {
+    analyticsService.recordError(result.error);
+  }
+
+  if (result.metadata?['tags']?.contains('critical') == true) {
+    notificationService.show('Critical operation completed');
   }
 });
-```
-
-### Custom Discovery Strategies
-
-Implement custom handler discovery logic:
-
-```dart
-class CustomDiscoveryStrategy implements HandlerDiscoveryStrategy {
-  @override
-  List<AbusHandler> discoverHandlers(BuildContext? context) {
-    // Custom discovery logic
-    return foundHandlers;
-  }
-}
-
-manager.setDiscoveryStrategy(CustomDiscoveryStrategy());
-```
-
-## Error Handling
-
-ABUS provides comprehensive error handling:
-
-### Validation Errors
-
-```dart
-final interaction = InteractionBuilder()
-  .withData({}) // Empty data will fail validation
-  .build(); // Throws ArgumentError with validation details
-```
-
-### Execution Errors
-
-```dart
-final result = await ABUS.execute(interaction);
-if (!result.isSuccess) {
-  print('Error: ${result.error}');
-  // Optimistic updates are automatically rolled back
-}
-```
-
-### Timeout Handling
-
-```dart
-final interaction = InteractionBuilder()
-  .withId('long_operation')
-  .withTimeout(Duration(seconds: 5))
-  .build();
-
-// Will timeout after 5 seconds and rollback optimistic changes
 ```
 
 ## Best Practices
 
 ### 1. Interaction Design
-
-- Use descriptive, unique IDs that include context
-- Include relevant tags for filtering and organization
-- Set appropriate timeouts based on operation complexity
-- Design rollback interactions for complex operations
+- Use descriptive IDs that indicate the operation
+- Include all necessary data in the interaction
+- Use tags for categorization and filtering
+- Set appropriate timeouts for operations
 
 ### 2. Handler Implementation
+- Implement specific `canHandle` logic to avoid conflicts
+- Handle errors gracefully in optimistic updates
+- Provide meaningful rollback implementations
+- Use proper error handling in API execution
 
-- Implement `canHandle()` to filter relevant interactions
-- Keep optimistic updates lightweight and fast
-- Store previous state for reliable rollback
-- Handle errors gracefully in all lifecycle methods
+### 3. Widget Integration
+- Configure update filters to prevent unnecessary rebuilds
+- Use debouncing for frequently changing data
+- Handle errors in `onAbusResult` for user feedback
+- Implement proper loading states
 
-### 3. State Management
+### 4. Memory Management
+- Dispose managers properly when no longer needed
+- Use appropriate snapshot limits for your use case
+- Clean up handlers when components are destroyed
 
-- Capture complete state snapshots for rollback
-- Use immutable state patterns where possible
-- Coordinate between multiple handlers carefully
-- Validate state consistency after rollbacks
+## Error Handling
 
-### 4. Performance Optimization
+### Automatic Error Handling
+- Failed API calls trigger automatic rollback
+- Timeout operations are handled gracefully
+- Invalid interactions are caught during validation
 
-- Limit the number of registered handlers
-- Use efficient state snapshot strategies
-- Implement selective handler discovery
-- Monitor pending interactions to prevent memory leaks
-
-## Common Use Cases
-
-### 1. User Profile Updates
-
+### Manual Error Handling
 ```dart
-final updateProfile = InteractionTypes.crud(
-  action: InteractionTypes.update,
-  resourceType: 'user',
-  resourceId: userId,
-  payload: {'name': newName, 'email': newEmail},
-  optimistic: true,
-);
+final result = await ABUS.execute(interaction);
 
-final result = await ABUS.executeWith(updateProfile, context);
-```
-
-### 2. Real-time Data Synchronization
-
-```dart
-final syncData = InteractionBuilder()
-  .withId('sync_messages')
-  .addData('lastSyncTimestamp', lastSync.toIso8601String())
-  .withOptimistic(false) // Don't update UI until confirmed
-  .addTag('sync')
-  .build();
-```
-
-### 3. Complex Multi-Step Operations
-
-```dart
-final createPost = InteractionBuilder()
-  .withId('create_post_with_images')
-  .addData('post', postData)
-  .addData('images', imageList)
-  .withTimeout(Duration(minutes: 2))
-  .withRollback(deletePostInteraction) // Custom rollback
-  .build();
+if (!result.isSuccess) {
+  switch (result.error) {
+    case 'Timeout':
+      showRetryDialog();
+      break;
+    case 'Network Error':
+      showOfflineMessage();
+      break;
+    default:
+      showGenericError(result.error);
+  }
+}
 ```
 
 ## Testing
 
-ABUS is designed to be testable:
-
+### Unit Testing Handlers
 ```dart
-// Reset manager between tests
-ABUSManager.reset();
+test('should handle user update optimistically', () async {
+  final handler = UserBloc();
+  final interaction = InteractionTypes.crud(
+    action: 'update',
+    resourceType: 'user',
+    payload: {'name': 'Test'},
+  );
 
-// Mock handlers for testing
-class MockUserHandler extends CustomAbusHandler {
-  @override
-  Future<InteractionResult> executeAPI(InteractionDefinition interaction) async {
-    return InteractionResult.success(data: {'userId': '123'});
-  }
-}
+  await handler.handleOptimistic('test_id', interaction);
 
-// Register mock handler
-ABUS.registerHandler(MockUserHandler());
+  expect(handler.state.user.name, equals('Test'));
+});
 ```
 
-## Migration and Integration
+### Integration Testing
+```dart
+testWidgets('should update UI optimistically', (tester) async {
+  await tester.pumpWidget(MyApp());
 
-ABUS can be gradually integrated into existing applications:
+  await tester.tap(find.byKey(Key('update_button')));
+  await tester.pump(); // Don't wait for API
 
-1. **Start with API-only handlers** - No state management changes required
-2. **Add optimistic updates gradually** - Implement `AbusHandler` mixins on existing classes
-3. **Leverage automatic discovery** - Pass `BuildContext` to enable automatic handler detection
-4. **Extend with custom interactions** - Create domain-specific interaction types
+  expect(find.text('Updated Name'), findsOneWidget);
+});
+```
 
-The package is designed to coexist with existing patterns and can be adopted incrementally without requiring a complete architectural overhaul.
+## Migration Guide
+
+### From Manual State Management
+1. Wrap existing API calls in interaction definitions
+2. Implement handlers for your current state management pattern
+3. Replace direct state updates with ABUS execution
+4. Add optimistic update logic gradually
+
+### From Other Async Libraries
+1. Map existing operations to interaction definitions
+2. Replace callback-based APIs with ABUS handlers
+3. Utilize built-in error handling and rollback capabilities
+4. Migrate widgets to use AbusWidgetMixin for automatic updates
+
+## Conclusion
+
+ABUS provides a comprehensive solution for handling asynchronous operations in Flutter applications. By unifying different state management patterns under a single interface, providing built-in optimistic updates and rollback capabilities, and offering sophisticated error handling, ABUS significantly reduces complexity while improving user experience.
+
+The system is designed to be incrementally adoptable, allowing teams to migrate existing code gradually while immediately benefiting from improved async operation handling. Whether you're building a simple app or a complex enterprise application, ABUS provides the tools and patterns needed for robust, responsive user interfaces.

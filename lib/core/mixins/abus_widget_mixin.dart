@@ -18,6 +18,9 @@ class AbusUpdateConfig {
   /// Whether to rebuild on error results
   final bool rebuildOnError;
 
+  /// Whether to rebuild on rollback results
+  final bool rebuildOnRollback;
+
   /// Custom filter function for fine-grained control
   final bool Function(ABUSResult)? customFilter;
 
@@ -32,10 +35,27 @@ class AbusUpdateConfig {
     this.tags,
     this.rebuildOnSuccess = true,
     this.rebuildOnError = true,
+    this.rebuildOnRollback = true,
     this.customFilter,
     this.debounceDelay,
     this.onlyWhenVisible = false,
   });
+
+  /// Default config for minimal rebuilds
+  static const AbusUpdateConfig minimal = AbusUpdateConfig(
+    rebuildOnSuccess: false,
+    rebuildOnError: false,
+    rebuildOnRollback: false,
+    debounceDelay: Duration(milliseconds: 500),
+  );
+
+  /// Config for error-only updates
+  static const AbusUpdateConfig errorsOnly = AbusUpdateConfig(
+    rebuildOnSuccess: false,
+    rebuildOnError: true,
+    rebuildOnRollback: true,
+    debounceDelay: Duration(milliseconds: 200),
+  );
 
   /// Check if this result should trigger an update
   bool shouldUpdate(ABUSResult result) {
@@ -47,7 +67,7 @@ class AbusUpdateConfig {
     // Special handling for rollback
     final isRollback = result.metadata?['rollback'] == true;
 
-    if (isRollback && !rebuildOnError) return false;
+    if (isRollback && !rebuildOnRollback) return false;
     if (!isRollback) {
       // Check success/error preferences
       if (result.isSuccess && !rebuildOnSuccess) return false;
@@ -59,7 +79,7 @@ class AbusUpdateConfig {
       if (!interactionIds!.contains(result.interactionId)) return false;
     }
 
-    // Check tags filter (assuming tags are in metadata)
+    // Check tags filter
     if (tags != null && result.metadata?['tags'] is List) {
       final resultTags = Set<String>.from(result.metadata!['tags'] as List);
       if (!tags!.any((tag) => resultTags.contains(tag))) return false;
@@ -73,6 +93,7 @@ class AbusUpdateConfig {
 mixin AbusWidgetMixin<T extends StatefulWidget> on State<T> {
   StreamSubscription<ABUSResult>? _subscription;
   Timer? _debounceTimer;
+  bool _disposed = false;
   bool _isVisible = true;
 
   /// Unique ID for this widget (optional)
@@ -90,41 +111,73 @@ mixin AbusWidgetMixin<T extends StatefulWidget> on State<T> {
 
   @override
   void dispose() {
+    _disposed = true;
     _subscription?.cancel();
+    _subscription = null;
     _debounceTimer?.cancel();
+    _debounceTimer = null;
     _unregisterWidgetId();
     super.dispose();
   }
 
   void _subscribeToResults() {
-    _subscription = ABUS.manager.resultStream.listen((result) {
-      if (!mounted) return;
-
-      if (abusConfig.onlyWhenVisible && !_isVisible) return;
-      if (!abusConfig.shouldUpdate(result)) return;
-
-      if (abusConfig.debounceDelay != null) {
-        _debounceTimer?.cancel();
-        _debounceTimer = Timer(abusConfig.debounceDelay!, () {
-          if (mounted) _handleResult(result);
-        });
-      } else {
-        _handleResult(result);
-      }
-    });
+    try {
+      _subscription = ABUS.manager.resultStream.listen(
+        _handleResult,
+        onError: (error) {
+          debugPrint('ABUS Widget Mixin error: $error');
+        },
+        cancelOnError: false,
+      );
+    } catch (e) {
+      debugPrint('Failed to subscribe to ABUS results: $e');
+    }
   }
 
   void _handleResult(ABUSResult result) {
-    onAbusResult(result);
-    if (shouldRebuild(result)) {
-      setState(() {}); // Rebuild this widget
+    if (_disposed || !mounted) return;
+
+    try {
+      // Check visibility filter
+      if (abusConfig.onlyWhenVisible && !_isVisible) return;
+
+      // Filter check
+      if (!abusConfig.shouldUpdate(result)) return;
+
+      // Debounce check
+      if (abusConfig.debounceDelay != null) {
+        _debounceTimer?.cancel();
+        _debounceTimer = Timer(abusConfig.debounceDelay!, () {
+          if (!_disposed && mounted) {
+            _processResult(result);
+          }
+        });
+      } else {
+        _processResult(result);
+      }
+    } catch (e) {
+      debugPrint('Error handling ABUS result in ${widget.runtimeType}: $e');
+    }
+  }
+
+  void _processResult(ABUSResult result) {
+    try {
+      onAbusResult(result);
+
+      if (shouldRebuild(result)) {
+        if (mounted && !_disposed) {
+          setState(() {}); // Rebuild this widget
+        }
+      }
+    } catch (e) {
+      debugPrint('Error processing ABUS result in ${widget.runtimeType}: $e');
     }
   }
 
   /// Override to perform custom handling on result
   void onAbusResult(ABUSResult result) {}
 
-  /// Override to prevent rebuilds
+  /// Override to control rebuilds per result
   bool shouldRebuild(ABUSResult result) => true;
 
   /// Visibility tracking
@@ -150,6 +203,19 @@ mixin AbusWidgetMixin<T extends StatefulWidget> on State<T> {
       _WidgetRegistry.instance.unregister(widgetId!);
     }
   }
+
+  /// Execute interaction with context automatically
+  Future<ABUSResult> executeInteraction(
+    InteractionDefinition interaction, {
+    bool? optimistic,
+    Duration? timeout,
+    bool autoRollback = true,
+  }) {
+    return ABUS.executeWith(interaction, context);
+  }
+
+  /// Quick interaction builder helper
+  InteractionBuilder interactionBuilder() => ABUS.builder();
 }
 
 class _WidgetRegistry {
