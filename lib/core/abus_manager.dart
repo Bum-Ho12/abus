@@ -18,9 +18,8 @@ abstract class AbusHandler {
   Future<void> handleCommit(
       String interactionId, InteractionDefinition interaction) async {}
 
-  /// Execute API call (optional - can be handled externally)
-  Future<InteractionResult>? executeAPI(InteractionDefinition interaction) =>
-      null;
+  /// Execute API call
+  Future<ABUSResult>? executeAPI(InteractionDefinition interaction) => null;
 
   /// Check if this handler can handle the interaction
   bool canHandle(InteractionDefinition interaction) => true;
@@ -34,7 +33,6 @@ abstract class AbusHandler {
 }
 
 /// Mixin for BLoCs to support ABUS interactions
-/// Only available if flutter_bloc package is present
 mixin AbusBloc<State> on Object implements AbusHandler {
   @override
   String get handlerId => runtimeType.toString();
@@ -54,10 +52,9 @@ mixin AbusBloc<State> on Object implements AbusHandler {
   Future<void> handleCommit(
       String interactionId, InteractionDefinition interaction) async {}
 
-  /// Execute API call (optional - can be handled externally)
+  /// Execute API call
   @override
-  Future<InteractionResult>? executeAPI(InteractionDefinition interaction) =>
-      null;
+  Future<ABUSResult>? executeAPI(InteractionDefinition interaction) => null;
 
   /// Check if this BLoC can handle the interaction
   @override
@@ -70,7 +67,6 @@ mixin AbusBloc<State> on Object implements AbusHandler {
 }
 
 /// Mixin for ChangeNotifiers to support ABUS interactions
-/// Only available if provider package is present
 mixin AbusProvider on ChangeNotifier implements AbusHandler {
   @override
   String get handlerId => runtimeType.toString();
@@ -90,10 +86,9 @@ mixin AbusProvider on ChangeNotifier implements AbusHandler {
   Future<void> handleCommit(
       String interactionId, InteractionDefinition interaction) async {}
 
-  /// Execute API call (optional - can be handled externally)
+  /// Execute API call
   @override
-  Future<InteractionResult>? executeAPI(InteractionDefinition interaction) =>
-      null;
+  Future<ABUSResult>? executeAPI(InteractionDefinition interaction) => null;
 
   /// Check if this provider can handle the interaction
   @override
@@ -167,7 +162,7 @@ class DefaultDiscoveryStrategy implements HandlerDiscoveryStrategy {
   }
 }
 
-/// Enhanced interaction manager with flexible dependency handling
+/// Interaction manager with flexible dependency handling
 class ABUSManager {
   static ABUSManager? _instance;
   static ABUSManager get instance => _instance ??= ABUSManager._();
@@ -176,17 +171,17 @@ class ABUSManager {
 
   // Unified handler list
   final List<AbusHandler> _handlers = [];
-  final List<Future<InteractionResult> Function(InteractionDefinition)>
-      _apiHandlers = [];
+  final List<Future<ABUSResult> Function(InteractionDefinition)> _apiHandlers =
+      [];
 
   final Map<String, StateSnapshot> _snapshots = {};
   final Map<String, Timer> _rollbackTimers = {};
-  final StreamController<InteractionResult> _resultController =
-      StreamController<InteractionResult>.broadcast();
+  final StreamController<ABUSResult> _resultController =
+      StreamController<ABUSResult>.broadcast();
 
   HandlerDiscoveryStrategy _discoveryStrategy;
 
-  Stream<InteractionResult> get resultStream => _resultController.stream;
+  Stream<ABUSResult> get resultStream => _resultController.stream;
 
   /// Set custom discovery strategy
   void setDiscoveryStrategy(HandlerDiscoveryStrategy strategy) {
@@ -195,7 +190,7 @@ class ABUSManager {
 
   /// Register a global API handler
   void registerApiHandler(
-      Future<InteractionResult> Function(InteractionDefinition) handler) {
+      Future<ABUSResult> Function(InteractionDefinition) handler) {
     _apiHandlers.add(handler);
   }
 
@@ -214,7 +209,7 @@ class ABUSManager {
   }
 
   /// Execute an interaction with automatic handler discovery
-  Future<InteractionResult> execute(
+  Future<ABUSResult> execute(
     InteractionDefinition interaction, {
     bool? optimistic,
     Duration? timeout,
@@ -254,7 +249,7 @@ class ABUSManager {
       );
       _snapshots[interactionId] = snapshot;
 
-      InteractionResult result;
+      ABUSResult result;
 
       if (useOptimistic) {
         // Execute optimistic updates first
@@ -291,7 +286,7 @@ class ABUSManager {
       return result;
     } catch (e) {
       final errorResult =
-          InteractionResult.error(e.toString(), interactionId: interactionId);
+          ABUSResult.error(e.toString(), interactionId: interactionId);
 
       // Rollback on error if optimistic was used
       if (useOptimistic) {
@@ -303,13 +298,12 @@ class ABUSManager {
     }
   }
 
-  Future<InteractionResult> _executeApiOnly(
+  Future<ABUSResult> _executeApiOnly(
       InteractionDefinition interaction, Duration timeout) async {
     for (final handler in _apiHandlers) {
       try {
         return await handler(interaction).timeout(timeout, onTimeout: () {
-          return InteractionResult.error('Timeout',
-              interactionId: interaction.id);
+          return ABUSResult.error('Timeout', interactionId: interaction.id);
         });
       } catch (e) {
         continue; // Try next handler
@@ -348,7 +342,7 @@ class ABUSManager {
     }
   }
 
-  Future<InteractionResult> _executeAPI(
+  Future<ABUSResult> _executeAPI(
     InteractionDefinition interaction,
     List<AbusHandler> handlers,
     Duration timeout,
@@ -358,8 +352,7 @@ class ABUSManager {
       final apiResult = handler.executeAPI(interaction);
       if (apiResult != null) {
         return await apiResult.timeout(timeout, onTimeout: () {
-          return InteractionResult.error('Timeout',
-              interactionId: interaction.id);
+          return ABUSResult.error('Timeout', interactionId: interaction.id);
         });
       }
     }
@@ -368,8 +361,7 @@ class ABUSManager {
     for (final handler in _apiHandlers) {
       try {
         return await handler(interaction).timeout(timeout, onTimeout: () {
-          return InteractionResult.error('Timeout',
-              interactionId: interaction.id);
+          return ABUSResult.error('Timeout', interactionId: interaction.id);
         });
       } catch (e) {
         continue; // Try next handler
@@ -419,6 +411,13 @@ class ABUSManager {
         }
       }
     }
+    // Emit rollback result so that widgets can respond
+    _resultController.add(ABUSResult.rollback(
+      interactionId: interactionId,
+      metadata: {
+        'tags': snapshot.interaction.tags.toList(),
+      },
+    ));
 
     _cleanupInteraction(interactionId);
   }

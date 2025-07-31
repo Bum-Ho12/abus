@@ -1,6 +1,7 @@
 // lib/core/abus_result.dart
+
 /// Result of an interaction execution
-class InteractionResult {
+class ABUSResult {
   final bool isSuccess;
   final Map<String, dynamic>? data;
   final String? error;
@@ -8,7 +9,7 @@ class InteractionResult {
   final String? interactionId;
   final Map<String, dynamic>? metadata;
 
-  InteractionResult._({
+  ABUSResult._({
     required this.isSuccess,
     this.data,
     this.error,
@@ -17,12 +18,12 @@ class InteractionResult {
     this.metadata,
   });
 
-  factory InteractionResult.success({
+  factory ABUSResult.success({
     Map<String, dynamic>? data,
     String? interactionId,
     Map<String, dynamic>? metadata,
   }) {
-    return InteractionResult._(
+    return ABUSResult._(
       isSuccess: true,
       data: data,
       timestamp: DateTime.now(),
@@ -31,12 +32,12 @@ class InteractionResult {
     );
   }
 
-  factory InteractionResult.error(
+  factory ABUSResult.error(
     String error, {
     String? interactionId,
     Map<String, dynamic>? metadata,
   }) {
-    return InteractionResult._(
+    return ABUSResult._(
       isSuccess: false,
       error: error,
       timestamp: DateTime.now(),
@@ -45,8 +46,26 @@ class InteractionResult {
     );
   }
 
+  /// Create a rollback result
+  /// This is used to indicate that an interaction was rolled back
+  factory ABUSResult.rollback({
+    String? interactionId,
+    Map<String, dynamic>? metadata,
+  }) {
+    return ABUSResult._(
+      isSuccess: false,
+      error: 'Rollback',
+      timestamp: DateTime.now(),
+      interactionId: interactionId,
+      metadata: {
+        ...?metadata,
+        'rollback': true,
+      },
+    );
+  }
+
   /// Create a copy with updated values
-  InteractionResult copyWith({
+  ABUSResult copyWith({
     bool? isSuccess,
     Map<String, dynamic>? data,
     String? error,
@@ -54,7 +73,7 @@ class InteractionResult {
     String? interactionId,
     Map<String, dynamic>? metadata,
   }) {
-    return InteractionResult._(
+    return ABUSResult._(
       isSuccess: isSuccess ?? this.isSuccess,
       data: data ?? this.data,
       error: error ?? this.error,
@@ -77,8 +96,8 @@ class InteractionResult {
   }
 
   /// Create from JSON
-  factory InteractionResult.fromJson(Map<String, dynamic> json) {
-    return InteractionResult._(
+  factory ABUSResult.fromJson(Map<String, dynamic> json) {
+    return ABUSResult._(
       isSuccess: json['isSuccess'] as bool,
       data: json['data'] as Map<String, dynamic>?,
       error: json['error'] as String?,
@@ -95,7 +114,7 @@ class InteractionResult {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is InteractionResult &&
+      other is ABUSResult &&
           runtimeType == other.runtimeType &&
           isSuccess == other.isSuccess &&
           error == other.error &&
