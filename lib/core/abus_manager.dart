@@ -2,8 +2,8 @@
 import 'dart:async';
 import 'dart:collection';
 import 'package:flutter/material.dart';
-import 'abus_definition.dart';
-import 'abus_result.dart';
+import 'package:abus/core/abus_definition.dart';
+import 'package:abus/core/abus_result.dart';
 
 /// Base interface for any state handler
 abstract class AbusHandler {

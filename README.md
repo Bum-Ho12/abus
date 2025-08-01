@@ -1,6 +1,5 @@
 # ABUS - Asynchronous Business Logic Unification System
 
-[![pub package](https://img.shields.io/pub/v/abus.svg)](https://pub.dev/packages/abus)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Flutter](https://img.shields.io/badge/Flutter-3.0%2B-blue.svg)](https://flutter.dev)
 
@@ -22,7 +21,7 @@ A unified Flutter package for handling asynchronous operations with built-in opt
 
 ```yaml
 dependencies:
-  abus: ^1.0.0
+  abus: ^0.0.1
 ```
 
 ### Basic Usage
@@ -287,7 +286,7 @@ ABUS.manager.resultStream.listen((result) {
 });
 ```
 
-<!-- ## Migration
+## Migration
 
 ABUS is designed to be incrementally adoptable:
 
@@ -298,21 +297,13 @@ ABUS is designed to be incrementally adoptable:
 
 ## Documentation
 
-- 📖 [Full Documentation](https://github.com/Bum-Ho12/abus/blob/main/DOCs.md)
-- 🎯 [API Reference](https://pub.dev/documentation/abus/latest/)
-- 💡 [Examples](https://github.com/yourusername/abus/tree/main/example)
-- 🐛 [Issues](https://github.com/yourusername/abus/issues)
+- 📖 [Full Documentation (GitHub)](https://github.com/Bum-Ho12/abus/blob/main/DOCs.md)
+- 🎯 [API Reference (pub.dev)](https://pub.dev/documentation/abus/latest/)
+- 💡 [Example App](https://github.com/Bum-Ho12/abus/tree/main/example)
+- 🐛 [Report Issues](https://github.com/Bum-Ho12/abus/issues)
 
-## Contributing
-
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
----
-
-**Made with ❤️ by the Flutter community**
-
-*ABUS - Because async operations shouldn't be async-ward* 😄 -->

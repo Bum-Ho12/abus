@@ -1,3 +1,6 @@
 ## 0.0.1
 
-* TODO: Describe initial release.
+- Initial public release of the ABUS package.
+- Supports optimistic interaction updates with rollback.
+- Provides integration with BLoC and Provider.
+- Includes mixins, and result tracking system.

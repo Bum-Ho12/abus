@@ -1,7 +1,6 @@
 // lib/core/mixins/abus_widget_mixin.dart
 import 'dart:async';
 import 'package:abus/abus.dart';
-import 'package:abus/core/abus_result.dart';
 import 'package:flutter/material.dart';
 
 /// Configuration for ABUS widget updates
