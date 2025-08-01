@@ -33,78 +33,38 @@ abstract class AbusHandler {
   String get handlerId;
 }
 
-/// Mixin for BLoCs to support ABUS interactions
-mixin AbusBloc<State> on Object implements AbusHandler {
-  @override
-  String get handlerId => runtimeType.toString();
-
-  /// Handle optimistic update for interaction
-  @override
-  Future<void> handleOptimistic(
-      String interactionId, InteractionDefinition interaction) async {}
-
-  /// Handle rollback for interaction
-  @override
-  Future<void> handleRollback(
-      String interactionId, InteractionDefinition interaction) async {}
-
-  /// Handle commit after successful API call
-  @override
-  Future<void> handleCommit(
-      String interactionId, InteractionDefinition interaction) async {}
-
-  /// Execute API call
-  @override
-  Future<ABUSResult>? executeAPI(InteractionDefinition interaction) => null;
-
-  /// Check if this BLoC can handle the interaction
-  @override
-  bool canHandle(InteractionDefinition interaction) => true;
-
-  /// Get current state for rollback capability
-  @override
-  Map<String, dynamic>? getCurrentState(InteractionDefinition interaction) =>
-      null;
-}
-
-/// Mixin for ChangeNotifiers to support ABUS interactions
-mixin AbusProvider on ChangeNotifier implements AbusHandler {
-  @override
-  String get handlerId => runtimeType.toString();
-
-  /// Handle optimistic update for interaction
-  @override
-  Future<void> handleOptimistic(
-      String interactionId, InteractionDefinition interaction) async {}
-
-  /// Handle rollback for interaction
-  @override
-  Future<void> handleRollback(
-      String interactionId, InteractionDefinition interaction) async {}
-
-  /// Handle commit after successful API call
-  @override
-  Future<void> handleCommit(
-      String interactionId, InteractionDefinition interaction) async {}
-
-  /// Execute API call
-  @override
-  Future<ABUSResult>? executeAPI(InteractionDefinition interaction) => null;
-
-  /// Check if this provider can handle the interaction
-  @override
-  bool canHandle(InteractionDefinition interaction) => true;
-
-  /// Get current state for rollback capability
-  @override
-  Map<String, dynamic>? getCurrentState(InteractionDefinition interaction) =>
-      null;
-}
-
 /// Custom handler for projects not using BLoC or Provider
 abstract class CustomAbusHandler implements AbusHandler {
   @override
   String get handlerId => runtimeType.toString();
+
+  /// Handle optimistic update for interaction
+  @override
+  Future<void> handleOptimistic(
+      String interactionId, InteractionDefinition interaction) async {}
+
+  /// Handle rollback for interaction
+  @override
+  Future<void> handleRollback(
+      String interactionId, InteractionDefinition interaction) async {}
+
+  /// Handle commit after successful API call
+  @override
+  Future<void> handleCommit(
+      String interactionId, InteractionDefinition interaction) async {}
+
+  /// Execute API call
+  @override
+  Future<ABUSResult>? executeAPI(InteractionDefinition interaction) => null;
+
+  /// Check if this can handle the interaction
+  @override
+  bool canHandle(InteractionDefinition interaction) => true;
+
+  /// Get current state for rollback capability
+  @override
+  Map<String, dynamic>? getCurrentState(InteractionDefinition interaction) =>
+      null;
 }
 
 /// State change snapshot for rollback capability
@@ -143,11 +103,12 @@ class _InteractionQueue {
     interaction.completer = completer;
     _queue.add(interaction);
 
-    _processQueue();
+    // Don't wait for _processQueue to complete - just start it
+    unawaited(_processQueue());
     return completer.future;
   }
 
-  void _processQueue() async {
+  Future<void> _processQueue() async {
     if (_isProcessing || _queue.isEmpty) return;
 
     _isProcessing = true;
@@ -189,7 +150,7 @@ class _QueuedInteraction {
   });
 }
 
-/// Interaction manager with backward compatibility and enhanced safety
+/// Interaction manager
 class ABUSManager {
   static ABUSManager? _instance;
   static ABUSManager get instance => _instance ??= ABUSManager._();
@@ -206,18 +167,16 @@ class ABUSManager {
       [];
   final _InteractionQueue _queue = _InteractionQueue();
 
-  // State management with size limits using LinkedHashMap for LRU behavior
+  // State management with size limits using LinkedHashMap for LRU(Least Recently Used) behavior
   final LinkedHashMap<String, StateSnapshot> _snapshots = LinkedHashMap();
   final Map<String, Timer> _rollbackTimers = {};
 
-  // Streams with proper cleanup
-  StreamController<ABUSResult>? _resultController;
+  // Streams with proper cleanup - initialize immediately
+  late final StreamController<ABUSResult> _resultController =
+      StreamController<ABUSResult>.broadcast();
   bool _disposed = false;
 
-  Stream<ABUSResult> get resultStream {
-    _resultController ??= StreamController<ABUSResult>.broadcast();
-    return _resultController!.stream;
-  }
+  Stream<ABUSResult> get resultStream => _resultController.stream;
 
   /// Register a global API handler
   void registerApiHandler(
@@ -272,7 +231,7 @@ class ABUSManager {
         '${interaction.id}_${DateTime.now().millisecondsSinceEpoch}';
 
     try {
-      // Auto-discover handlers if context provided (backward compatibility)
+      // Auto-discover handlers if context provided
       if (context != null) {
         _discoverHandlers(context);
       }
@@ -351,7 +310,7 @@ class ABUSManager {
     _snapshots[interactionId] = snapshot;
   }
 
-  /// Simple handler discovery for backward compatibility
+  /// handler discovery
   void _discoverHandlers(BuildContext context) {
     try {
       context.visitAncestorElements((element) {
@@ -382,7 +341,12 @@ class ABUSManager {
         continue;
       }
     }
-    throw Exception('No API handler found for interaction: ${interaction.id}');
+
+    // Error message for debugging
+    final errorMsg = _apiHandlers.isEmpty
+        ? 'No API handler registered for interaction: ${interaction.id}'
+        : 'No API handler found for interaction: ${interaction.id}';
+    return ABUSResult.error(errorMsg, interactionId: interaction.id);
   }
 
   Map<String, dynamic>? _getPreviousState(
@@ -452,7 +416,9 @@ class ABUSManager {
       }
     }
 
-    throw Exception('No API handler found for interaction: ${interaction.id}');
+    return ABUSResult.error(
+        'No API handler found for interaction: ${interaction.id}',
+        interactionId: interaction.id);
   }
 
   Future<void> _commit(
@@ -531,10 +497,8 @@ class ABUSManager {
   }
 
   void _emitResult(ABUSResult result) {
-    if (!_disposed &&
-        _resultController != null &&
-        !_resultController!.isClosed) {
-      _resultController!.add(result);
+    if (!_disposed && !_resultController.isClosed) {
+      _resultController.add(result);
     }
   }
 
@@ -571,8 +535,7 @@ class ABUSManager {
     _handlers.clear();
     _apiHandlers.clear();
 
-    _resultController?.close();
-    _resultController = null;
+    _resultController.close();
   }
 
   /// Reset to new instance (useful for testing)
@@ -580,4 +543,9 @@ class ABUSManager {
     _instance?.dispose();
     _instance = null;
   }
+}
+
+// Helper function for unawaited futures
+void unawaited(Future<void> future) {
+  // Intentionally empty - just prevents analyzer warnings
 }
