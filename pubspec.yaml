@@ -2,7 +2,7 @@ name: abus
 description: >
   A-synchronous Business Unified System for Flutter state management.
   Supports optimistic updates with rollback and integrates with BLoC and Provider.
-version: 0.0.2
+version: 0.0.3
 homepage: https://github.com/Bum-Ho12/abus
 repository: https://github.com/Bum-Ho12/abus
 issue_tracker: https://github.com/Bum-Ho12/abus/issues

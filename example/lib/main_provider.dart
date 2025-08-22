@@ -581,7 +581,7 @@ extension InteractionDefinitionExtension on InteractionDefinition {
       final generic = this as GenericInteraction;
       return GenericInteraction(
         id: id ?? generic.id,
-        data: data ?? generic.toJson()['data'],
+        payload: data ?? generic.toJson()['data'],
         rollback: rollback ?? generic.createRollback(),
         timeout: timeout ?? generic.timeout,
         supportsOptimistic: supportsOptimistic ?? generic.supportsOptimistic,
@@ -593,7 +593,7 @@ extension InteractionDefinitionExtension on InteractionDefinition {
     // Fallback for other implementations
     return GenericInteraction(
       id: id ?? this.id,
-      data: data ?? toJson(),
+      payload: data ?? toJson(),
       rollback: rollback ?? createRollback(),
       timeout: timeout ?? this.timeout,
       supportsOptimistic: supportsOptimistic ?? this.supportsOptimistic,
