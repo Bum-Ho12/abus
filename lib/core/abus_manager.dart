@@ -241,7 +241,9 @@ class ABUSManager {
           _handlers.where((h) => h.canHandle(interaction)).toList();
 
       if (compatibleHandlers.isEmpty) {
-        return await _executeApiOnly(interaction, timeoutDuration);
+        final result = await _executeApiOnly(interaction, timeoutDuration);
+        _emitResult(result);
+        return result;
       }
 
       // Create snapshot for rollback with memory management
@@ -334,9 +336,17 @@ class ABUSManager {
       InteractionDefinition interaction, Duration timeout) async {
     for (final handler in _apiHandlers) {
       try {
-        return await handler(interaction).timeout(timeout, onTimeout: () {
+        final result =
+            await handler(interaction).timeout(timeout, onTimeout: () {
           return ABUSResult.error('Timeout', interactionId: interaction.id);
         });
+
+        // If successful and interaction has payload, preserve it
+        if (result.isSuccess && interaction.payload != null) {
+          return result.copyWith(payload: interaction.payload);
+        }
+
+        return result;
       } catch (e) {
         continue;
       }
