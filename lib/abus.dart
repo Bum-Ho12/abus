@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 
 export 'core/abus_manager.dart';
 export 'core/abus_definition.dart';
-export 'core/abus_payload.dart'; // NEW: Export payload classes
 export 'core/mixins/abus_widget_mixin.dart';
 export 'core/mixins/bloc_mixin.dart';
 export 'core/mixins/provider_mixin.dart';
@@ -42,35 +41,5 @@ class ABUS {
   /// Register handler
   static void registerHandler(AbusHandler handler) {
     manager.registerHandler(handler);
-  }
-
-  /// BACKWARD COMPATIBILITY: Legacy method names and signatures
-
-  /// Legacy method for creating results with map data
-  @Deprecated('Use ABUSResult.success(data: ...) instead')
-  static ABUSResult successResult({
-    Map<String, dynamic>? data,
-    String? interactionId,
-    Map<String, dynamic>? metadata,
-  }) {
-    return ABUSResult.success(
-      data: data,
-      interactionId: interactionId,
-      metadata: metadata,
-    );
-  }
-
-  /// Legacy method for creating error results
-  @Deprecated('Use ABUSResult.error(...) instead')
-  static ABUSResult errorResult(
-    String error, {
-    String? interactionId,
-    Map<String, dynamic>? metadata,
-  }) {
-    return ABUSResult.error(
-      error,
-      interactionId: interactionId,
-      metadata: metadata,
-    );
   }
 }

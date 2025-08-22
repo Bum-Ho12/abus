@@ -1,6 +1,4 @@
 // lib/core/abus_definition.dart
-import 'package:abus/core/abus_payload.dart';
-
 /// Base interface for all interaction definitions
 abstract class InteractionDefinition {
   /// Unique identifier for this interaction type
@@ -8,19 +6,6 @@ abstract class InteractionDefinition {
 
   /// Serializes the interaction data
   Map<String, dynamic> toJson();
-
-  /// Get the payload (any type)
-  dynamic get payload;
-
-  /// Get typed payload
-  T? getPayload<T>() {
-    if (payload is SmartPayload) {
-      return (payload as SmartPayload).as<T>();
-    } else if (payload is T) {
-      return payload as T;
-    }
-    return null;
-  }
 
   /// Creates a rollback interaction (optional)
   InteractionDefinition? createRollback() => null;
@@ -48,7 +33,7 @@ abstract class InteractionDefinition {
 class GenericInteraction extends InteractionDefinition {
   @override
   final String id;
-  final SmartPayload _smartPayload;
+  final Map<String, dynamic> data;
   final InteractionDefinition? _rollback;
   @override
   final Duration? timeout;
@@ -61,48 +46,17 @@ class GenericInteraction extends InteractionDefinition {
 
   GenericInteraction({
     required this.id,
-    dynamic payload,
-    Map<String, dynamic>? data, // Keep for backward compatibility
+    required this.data,
     InteractionDefinition? rollback,
     this.timeout,
     this.supportsOptimistic = true,
     this.priority = 0,
     this.tags = const {},
-  })  : _smartPayload = SmartPayload.from(payload ?? data ?? {}),
-        _rollback = rollback;
-
-  @override
-  dynamic get payload => _smartPayload.raw;
-
-  /// BACKWARD COMPATIBILITY: Legacy data property
-  /// Returns Map &lt; String, dynamic &gt; for backward compatibility
-  @Deprecated('Use getPayload<Map<String, dynamic>>() or payload instead')
-  Map<String, dynamic> get data {
-    final payloadData = _smartPayload.raw;
-    if (payloadData is Map<String, dynamic>) {
-      return payloadData;
-    } else if (payloadData is Map) {
-      return Map<String, dynamic>.from(payloadData);
-    }
-    // For non-map payloads, return empty map to maintain compatibility
-    return <String, dynamic>{};
-  }
-
-  /// Get typed payload
-  @override
-  T? getPayload<T>() => _smartPayload.as<T>();
-
-  /// Check if payload is of specific type
-  bool isPayload<T>() => _smartPayload.isOf<T>();
-
-  /// Get payload type name
-  String get payloadType => _smartPayload.type;
+  }) : _rollback = rollback;
 
   @override
   Map<String, dynamic> toJson() => {
         'id': id,
-        'payload': _smartPayload.toJson(),
-        // BACKWARD COMPATIBILITY: Include data field in JSON
         'data': data,
         'timeout': timeout?.inMilliseconds,
         'supportsOptimistic': supportsOptimistic,
@@ -115,36 +69,22 @@ class GenericInteraction extends InteractionDefinition {
 
   @override
   bool validate() {
-    return id.isNotEmpty && _smartPayload.validate();
+    return id.isNotEmpty && data.isNotEmpty;
   }
 
   @override
   List<String> getValidationErrors() {
     final errors = <String>[];
     if (id.isEmpty) errors.add('ID cannot be empty');
-    errors.addAll(_smartPayload.getValidationErrors());
+    if (data.isEmpty) errors.add('Data cannot be empty');
     return errors;
   }
 
-  /// Create from JSON - supports both old and new formats
+  /// Create from JSON
   factory GenericInteraction.fromJson(Map<String, dynamic> json) {
-    dynamic payloadData;
-
-    // Support both new 'payload' and old 'data' formats
-    if (json.containsKey('payload')) {
-      final payloadJson = json['payload'] as Map<String, dynamic>?;
-      if (payloadJson != null) {
-        final smartPayload = SmartPayload.fromJson(payloadJson);
-        payloadData = smartPayload.raw;
-      }
-    } else if (json.containsKey('data')) {
-      // BACKWARD COMPATIBILITY: Support old 'data' field
-      payloadData = json['data'] as Map<String, dynamic>?;
-    }
-
     return GenericInteraction(
       id: json['id'] as String,
-      payload: payloadData,
+      data: json['data'] as Map<String, dynamic>,
       timeout: json['timeout'] != null
           ? Duration(milliseconds: json['timeout'] as int)
           : null,
@@ -168,7 +108,7 @@ class GenericInteraction extends InteractionDefinition {
 /// Builder for creating interactions easily
 class InteractionBuilder {
   String? _id;
-  dynamic _payload;
+  Map<String, dynamic> _data = {};
   InteractionDefinition? _rollback;
   Duration? _timeout;
   bool _supportsOptimistic = true;
@@ -180,29 +120,13 @@ class InteractionBuilder {
     return this;
   }
 
-  /// Set payload with any type (classes, maps, primitives, ...)
-  InteractionBuilder withPayload(dynamic payload) {
-    _payload = payload;
-    return this;
-  }
-
-  /// Set map data/original key-value (backward compatibility)
   InteractionBuilder withData(Map<String, dynamic> data) {
-    _payload = data;
+    _data = data;
     return this;
   }
 
-  /// Single key-value pair to map payload (backward compatibility)
   InteractionBuilder addData(String key, dynamic value) {
-    if (_payload is Map<String, dynamic>) {
-      (_payload as Map<String, dynamic>)[key] = value;
-    } else if (_payload == null) {
-      _payload = <String, dynamic>{key: value};
-    } else {
-      throw ArgumentError(
-          'Cannot add data to non-map payload. Current payload type: ${_payload.runtimeType}. '
-          'Use withPayload() to set a new payload or withData() to replace with a map.');
-    }
+    _data[key] = value;
     return this;
   }
 
@@ -246,7 +170,7 @@ class InteractionBuilder {
 
     final interaction = GenericInteraction(
       id: _id!,
-      payload: _payload,
+      data: _data,
       rollback: _rollback,
       timeout: _timeout,
       supportsOptimistic: _supportsOptimistic,
@@ -266,7 +190,7 @@ class InteractionBuilder {
   /// Reset builder for reuse
   InteractionBuilder reset() {
     _id = null;
-    _payload = null;
+    _data = {};
     _rollback = null;
     _timeout = null;
     _supportsOptimistic = true;
