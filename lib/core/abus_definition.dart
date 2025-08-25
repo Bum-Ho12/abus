@@ -1,5 +1,6 @@
 // lib/core/abus_definition.dart
 /// Base interface for all interaction definitions
+/// Implementations:
 abstract class InteractionDefinition {
   /// Unique identifier for this interaction type
   String get id;
