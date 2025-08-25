@@ -1,7 +1,7 @@
 name: abus
 description: >
-  A-synchronous Business Unified System for Flutter state management.
-  Supports optimistic updates with rollback and integrates with BLoC and Provider.
+  ABUS (A-synchronous Business Unified System) is a comprehensive Flutter package that provides 
+  a unified approach to handling asynchronous operations, state management, and API interactions with built-in optimistic updates, rollback capabilities, and error handling.
 version: 0.0.3
 homepage: https://github.com/Bum-Ho12/abus
 repository: https://github.com/Bum-Ho12/abus

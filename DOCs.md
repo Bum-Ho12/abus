@@ -1,8 +1,8 @@
-# ABUS - Asynchronous Business Logic Unification System
+# ABUS - A-synchronous Business Unified System
 
 ## Overview
 
-ABUS (Asynchronous Business Logic Unification System) is a comprehensive Flutter package that provides a unified approach to handling asynchronous operations, state management, and API interactions with built-in optimistic updates, rollback capabilities, and error handling.
+ABUS (A-synchronous Business Unified System) is a comprehensive Flutter package that provides a unified approach to handling asynchronous operations, state management, and API interactions with built-in optimistic updates, rollback capabilities, and error handling.
 
 ## Core Concept
 
@@ -41,10 +41,15 @@ This approach provides excellent user experience while maintaining data consiste
 - Filterable result streams
 - Debounced widget updates
 
+### 🏗️ Type-Safe Interactions
+- Support for both generic (Map-based) and typed (class-based) interactions
+- Type-safe payload handling in results
+- Custom JSON serialization support
+
 ## Core Architecture
 
 ### 1. Interaction Definitions (`InteractionDefinition`)
-The foundation of ABUS - defines what operation should be performed.
+The foundation of ABUS - defines what operation should be performed. Now supports both generic and typed interactions.
 
 ```dart
 abstract class InteractionDefinition {
@@ -55,7 +60,55 @@ abstract class InteractionDefinition {
   bool get supportsOptimistic;      // Optimistic update support
   int get priority;                 // Execution priority
   Set<String> get tags;             // Categorization tags
+  Object? get payload;              // Typed payload (for ClassInteraction)
+  Type? get payloadType;            // Payload type information
+  bool validate();                  // Validation
+  List<String> getValidationErrors(); // Validation errors
 }
+```
+
+#### Generic Interactions (Map-based)
+For simple operations with flexible data structures:
+
+```dart
+final interaction = GenericInteraction(
+  id: 'update_user_settings',
+  data: {
+    'userId': '123',
+    'settings': {
+      'theme': 'dark',
+      'notifications': true,
+    },
+  },
+  timeout: Duration(seconds: 10),
+  tags: {'user', 'settings'},
+);
+```
+
+#### Class-Based Interactions (Typed)
+For type-safe operations with defined data models:
+
+```dart
+class User {
+  final String id;
+  final String name;
+  final String email;
+
+  User({required this.id, required this.name, required this.email});
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'email': email,
+  };
+}
+
+final interaction = ClassInteraction<User>(
+  id: 'create_user',
+  payload: User(id: '123', name: 'John Doe', email: 'john@example.com'),
+  timeout: Duration(seconds: 15),
+  tags: {'user', 'create'},
+);
 ```
 
 **Key Features:**
@@ -64,8 +117,50 @@ abstract class InteractionDefinition {
 - **Rollback Support**: Optional rollback definitions for complex operations
 - **Priority System**: High-priority operations execute first
 - **Tagging**: Categorize operations for filtering and handling
+- **Validation**: Built-in validation with error reporting
 
-### 2. Handler System (`AbusHandler`)
+### 2. Result System (`ABUSResult`)
+Enhanced to support typed payloads alongside generic data:
+
+```dart
+class ABUSResult {
+  final bool isSuccess;
+  final Map<String, dynamic>? data;    // Generic data
+  final Object? payload;               // Typed payload
+  final String? error;
+  final DateTime timestamp;
+  final String? interactionId;
+  final Map<String, dynamic>? metadata;
+
+  // Type-safe payload access
+  T? getPayload<T>();
+  Type? get payloadType;
+  bool hasPayloadType<T>();
+}
+```
+
+#### Working with Typed Results
+```dart
+final result = await ABUS.execute(userInteraction);
+
+if (result.isSuccess) {
+  // Type-safe payload access
+  final user = result.getPayload<User>();
+  if (user != null) {
+    print('Created user: ${user.name}');
+  }
+
+  // Check payload type
+  if (result.hasPayloadType<User>()) {
+    print('Payload is a User object');
+  }
+
+  // Generic data access still available
+  final metadata = result.data?['metadata'];
+}
+```
+
+### 3. Handler System (`AbusHandler`)
 Handles the actual execution of interactions across different state management patterns.
 
 ```dart
@@ -85,7 +180,7 @@ abstract class AbusHandler {
 - **AbusProvider**: Mixin for Provider pattern integration
 - **CustomAbusHandler**: For custom state management solutions
 
-### 3. Manager (`ABUSManager`)
+### 4. Manager (`ABUSManager`)
 The central orchestrator that coordinates all operations.
 
 **Core Responsibilities:**
@@ -125,7 +220,7 @@ await ABUS.execute(interaction);
 // UI reverts to previous state
 ```
 
-## Key Features
+## Key Features (Detailed)
 
 ### 🚀 Optimistic Updates
 - **Immediate UI Response**: Users see changes instantly
@@ -153,6 +248,7 @@ await ABUS.execute(interaction);
 class ABUSResult {
   final bool isSuccess;
   final Map<String, dynamic>? data;
+  final Object? payload;               // NEW: Typed payload support
   final String? error;
   final DateTime timestamp;
   final String? interactionId;
@@ -163,8 +259,10 @@ class ABUSResult {
 ## Usage Examples
 
 ### Basic CRUD Operations
+
+#### Generic CRUD (Map-based)
 ```dart
-// Create
+// Create with generic data
 final createUser = InteractionTypes.crud(
   action: 'create',
   resourceType: 'user',
@@ -180,26 +278,84 @@ final updateUser = InteractionTypes.crud(
   optimistic: true,
 );
 
-// Execute
 final result = await ABUS.execute(updateUser);
 ```
 
-### Custom Interactions
+#### Typed CRUD (Class-based)
 ```dart
-final customInteraction = ABUS.builder()
+class User {
+  final String name;
+  final String email;
+
+  User(this.name, this.email);
+
+  Map<String, dynamic> toJson() => {'name': name, 'email': email};
+}
+
+// Create with typed payload
+final createUser = InteractionTypes.crudWithPayload<User>(
+  action: 'create',
+  resourceType: 'user',
+  payload: User('John Doe', 'john@example.com'),
+);
+
+// Update with typed payload
+final updateUser = InteractionTypes.crudWithPayload<User>(
+  action: 'update',
+  resourceType: 'user',
+  resourceId: '123',
+  payload: User('Jane Doe', 'jane@example.com'),
+  optimistic: true,
+);
+
+final result = await ABUS.execute(updateUser);
+
+// Type-safe result handling
+if (result.isSuccess) {
+  final user = result.getPayload<User>();
+  print('User updated: ${user?.name}');
+}
+```
+
+### Using the Interaction Builder
+
+#### Generic Interactions
+```dart
+final customInteraction = InteractionBuilder()
   .withId('sync_user_data')
-  .addData('userId', '123')
-  .addData('includePreferences', true)
+  .withData({'userId': '123', 'includePreferences': true})
   .withTimeout(Duration(seconds: 30))
   .withPriority(1)
   .addTag('sync')
   .addTag('critical')
   .build();
-
-final result = await ABUS.execute(customInteraction);
 ```
 
-### Widget Integration
+#### Typed Interactions
+```dart
+class SyncRequest {
+  final String userId;
+  final bool includePreferences;
+
+  SyncRequest(this.userId, this.includePreferences);
+
+  Map<String, dynamic> toJson() => {
+    'userId': userId,
+    'includePreferences': includePreferences,
+  };
+}
+
+final typedInteraction = InteractionBuilder<SyncRequest>()
+  .withId('sync_user_data')
+  .withPayload(SyncRequest('123', true))
+  .withTimeout(Duration(seconds: 30))
+  .withPriority(1)
+  .addTags(['sync', 'critical'])
+  .build();
+```
+
+### Widget Integration with Type Support
+
 ```dart
 class UserProfile extends StatefulWidget {
   @override
@@ -216,7 +372,15 @@ class _UserProfileState extends State<UserProfile> with AbusWidgetMixin {
 
   @override
   void onAbusResult(ABUSResult result) {
-    if (!result.isSuccess) {
+    if (result.isSuccess) {
+      // Handle typed payloads
+      final user = result.getPayload<User>();
+      if (user != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('User ${user.name} updated successfully')),
+        );
+      }
+    } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: ${result.error}')),
       );
@@ -224,10 +388,26 @@ class _UserProfileState extends State<UserProfile> with AbusWidgetMixin {
   }
 
   void updateUser() {
-    final interaction = InteractionTypes.crud(
-      action: 'update',
-      resourceType: 'user',
-      payload: {'name': newName},
+    final user = User('New Name', 'new@example.com');
+
+    // Using typed interaction
+    final interaction = ClassInteraction<User>(
+      id: 'update_user_profile',
+      payload: user,
+    );
+
+    executeInteraction(interaction);
+  }
+
+  void updateUserGeneric() {
+    // Using generic interaction
+    final interaction = GenericInteraction(
+      id: 'update_user_profile',
+      data: {
+        'resourceType': 'user',
+        'action': 'update',
+        'payload': {'name': 'New Name', 'email': 'new@example.com'},
+      },
     );
 
     executeInteraction(interaction);
@@ -235,36 +415,61 @@ class _UserProfileState extends State<UserProfile> with AbusWidgetMixin {
 }
 ```
 
-### Handler Implementation
+### Handler Implementation with Type Support
+
 ```dart
 class UserBloc extends Bloc<UserEvent, UserState> with AbusBloc {
   @override
   bool canHandle(InteractionDefinition interaction) {
+    // Handle both generic and typed user interactions
+    if (interaction is ClassInteraction) {
+      return interaction.payload is User || interaction.id.contains('user');
+    }
     return interaction.toJson()['data']?['resourceType'] == 'user';
   }
 
   @override
   Future<void> handleOptimistic(String interactionId, InteractionDefinition interaction) async {
-    final data = interaction.toJson()['data'] as Map<String, dynamic>;
-
-    if (data['action'] == 'update') {
-      // Update state optimistically
-      final updatedUser = state.user.copyWith(name: data['payload']['name']);
-      emit(state.copyWith(user: updatedUser));
+    if (interaction is ClassInteraction<User>) {
+      // Type-safe handling
+      final user = interaction.payload;
+      emit(state.copyWith(user: user));
+    } else if (interaction is GenericInteraction) {
+      // Generic handling
+      final data = interaction.data;
+      if (data['action'] == 'update' && data['payload'] is Map<String, dynamic>) {
+        final userMap = data['payload'] as Map<String, dynamic>;
+        final updatedUser = state.user.copyWith(name: userMap['name']);
+        emit(state.copyWith(user: updatedUser));
+      }
     }
   }
 
   @override
   Future<ABUSResult> executeAPI(InteractionDefinition interaction) async {
-    final data = interaction.toJson()['data'] as Map<String, dynamic>;
-
     try {
-      final response = await userRepository.updateUser(
-        data['resourceId'],
-        data['payload'],
-      );
+      if (interaction is ClassInteraction<User>) {
+        // Type-safe API call
+        final user = interaction.payload;
+        final response = await userRepository.createUser(user);
 
-      return ABUSResult.success(data: response);
+        return ABUSResult.success(
+          data: response,
+          payload: user, // Return the typed payload
+          interactionId: interaction.id,
+        );
+      } else if (interaction is GenericInteraction) {
+        // Generic API call
+        final data = interaction.data;
+        final response = await userRepository.updateUser(
+          data['resourceId'],
+          data['payload'],
+        );
+
+        return ABUSResult.success(data: response);
+      }
+
+      return ABUSResult.error('Unsupported interaction type');
     } catch (e) {
       return ABUSResult.error(e.toString());
     }
@@ -310,6 +515,27 @@ AbusUpdateConfig get abusConfig => AbusUpdateConfig(
 
 ## Advanced Features
 
+### Custom JSON Serialization for Complex Types
+```dart
+class ComplexUser {
+  final String name;
+  final DateTime lastLogin;
+  final List<String> permissions;
+
+  ComplexUser(this.name, this.lastLogin, this.permissions);
+}
+
+final interaction = ClassInteraction<ComplexUser>(
+  id: 'create_complex_user',
+  payload: ComplexUser('John', DateTime.now(), ['read', 'write']),
+  toJsonConverter: (user) => {
+    'name': user.name,
+    'lastLogin': user.lastLogin.toIso8601String(),
+    'permissions': user.permissions,
+  },
+);
+```
+
 ### Manual Rollback Control
 ```dart
 // Execute with manual rollback control
@@ -352,30 +578,80 @@ ABUS.manager.resultStream.listen((result) {
 });
 ```
 
+### Mixed Result Handling
+```dart
+final result = await ABUS.execute(interaction);
+
+if (result.isSuccess) {
+  // Try typed payload first
+  final user = result.getPayload<User>();
+  if (user != null) {
+    handleTypedUser(user);
+  } else {
+    // Fall back to generic data
+    final userData = result.data?['user'];
+    if (userData != null) {
+      handleGenericUser(userData);
+    }
+  }
+}
+```
+
+### Type-Safe Result Filtering
+```dart
+// Filter results by payload type
+ABUS.manager.resultStream
+  .where((result) => result.hasPayloadType<User>())
+  .listen((result) {
+    final user = result.getPayload<User>()!;
+    print('User operation completed: ${user.name}');
+  });
+```
+
 ## Best Practices
 
-### 1. Interaction Design
+### 1. Choosing Between Generic and Typed Interactions
+- **Use Generic Interactions** for:
+  - Simple CRUD operations with flexible data
+  - Rapid prototyping
+  - Dynamic data structures
+  - Legacy code integration
+
+- **Use Class-Based Interactions** for:
+  - Complex data models
+  - Type safety requirements
+  - Production applications
+  - APIs with well-defined schemas
+
+### 2. Interaction Design
 - Use descriptive IDs that indicate the operation
 - Include all necessary data in the interaction
 - Use tags for categorization and filtering
 - Set appropriate timeouts for operations
 
-### 2. Handler Implementation
+### 3. Handler Implementation
 - Implement specific `canHandle` logic to avoid conflicts
 - Handle errors gracefully in optimistic updates
 - Provide meaningful rollback implementations
 - Use proper error handling in API execution
+- Support both typed and generic interactions when possible
 
-### 3. Widget Integration
+### 4. Widget Integration
 - Configure update filters to prevent unnecessary rebuilds
 - Use debouncing for frequently changing data
 - Handle errors in `onAbusResult` for user feedback
 - Implement proper loading states
 
-### 4. Memory Management
+### 5. Memory Management
 - Dispose managers properly when no longer needed
 - Use appropriate snapshot limits for your use case
 - Clean up handlers when components are destroyed
+
+### 6. Type Safety Guidelines
+- Always implement `toJson()` in payload classes
+- Use custom converters for complex serialization
+- Handle both typed and generic results in handlers
+- Validate payload types in `canHandle` methods
 
 ## Error Handling
 
@@ -418,6 +694,19 @@ test('should handle user update optimistically', () async {
 
   expect(handler.state.user.name, equals('Test'));
 });
+
+test('should handle typed user interaction', () async {
+  final handler = UserBloc();
+  final user = User('Test User', 'test@example.com');
+  final interaction = ClassInteraction<User>(
+    id: 'create_user',
+    payload: user,
+  );
+
+  await handler.handleOptimistic('test_id', interaction);
+
+  expect(handler.state.user.name, equals('Test User'));
+});
 ```
 
 ### Integration Testing
@@ -446,8 +735,71 @@ testWidgets('should update UI optimistically', (tester) async {
 3. Utilize built-in error handling and rollback capabilities
 4. Migrate widgets to use AbusWidgetMixin for automatic updates
 
+### Migration from Generic-Only ABUS
+
+#### Step 1: Update Handler Implementations
+```dart
+// Before (generic only)
+@override
+Future<void> handleOptimistic(String id, InteractionDefinition interaction) async {
+  final data = interaction.toJson()['data'];
+  // Handle generic data...
+}
+
+// After (supporting both)
+@override
+Future<void> handleOptimistic(String id, InteractionDefinition interaction) async {
+  if (interaction is ClassInteraction<User>) {
+    final user = interaction.payload;
+    // Handle typed payload...
+  } else {
+    final data = interaction.toJson()['data'];
+    // Handle generic data...
+  }
+}
+```
+
+#### Step 2: Gradually Introduce Typed Models
+```dart
+// Define your models
+class User {
+  final String name;
+  final String email;
+
+  User(this.name, this.email);
+  Map<String, dynamic> toJson() => {'name': name, 'email': email};
+}
+
+// Start using typed interactions
+final typedInteraction = ClassInteraction<User>(
+  id: 'create_user',
+  payload: User('John', 'john@example.com'),
+);
+```
+
+#### Step 3: Update Result Handling
+```dart
+// Before
+final result = await ABUS.execute(interaction);
+final userData = result.data?['user'];
+
+// After (with type safety)
+final result = await ABUS.execute(interaction);
+final user = result.getPayload<User>();
+if (user != null) {
+  // Type-safe access to user properties
+  print(user.name);
+}
+```
+
 ## Conclusion
+
+With the addition of class-based interactions and typed results, ABUS now provides both flexibility and type safety. You can choose the approach that best fits your use case:
+
+- **Generic interactions** for flexibility and rapid development
+- **Typed interactions** for production applications requiring type safety
+- **Mixed approach** during migration or for different parts of your application
 
 ABUS provides a comprehensive solution for handling asynchronous operations in Flutter applications. By unifying different state management patterns under a single interface, providing built-in optimistic updates and rollback capabilities, and offering sophisticated error handling, ABUS significantly reduces complexity while improving user experience.
 
-The system is designed to be incrementally adoptable, allowing teams to migrate existing code gradually while immediately benefiting from improved async operation handling. Whether you're building a simple app or a complex enterprise application, ABUS provides the tools and patterns needed for robust, responsive user interfaces.
+The system is designed to be incrementally adoptable, allowing teams to migrate existing code gradually while immediately benefiting from improved async operation handling. Whether you're building a simple app or a complex enterprise application, ABUS provides the tools and patterns needed for robust, responsive, and type-safe user interfaces.

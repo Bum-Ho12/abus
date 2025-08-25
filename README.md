@@ -1,5 +1,4 @@
-# ABUS - Asynchronous Business Logic Unification System
-
+# ABUS - A-synchronous Business Unified System
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Flutter](https://img.shields.io/badge/Flutter-3.0%2B-blue.svg)](https://flutter.dev)
 
@@ -21,7 +20,7 @@ A unified Flutter package for handling asynchronous operations with built-in opt
 
 ```yaml
 dependencies:
-  abus: ^0.0.2
+  abus: ^0.0.3
 ```
 
 ### Basic Usage
