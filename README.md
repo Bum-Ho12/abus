@@ -4,6 +4,8 @@
 
 A unified Flutter package for handling asynchronous operations with built-in optimistic updates, automatic rollback, and seamless state management integration.
 
+![ABUS Flow](doc/ABUS_flow.svg)
+
 ## Key Features
 
 - 🚀 **Optimistic Updates** - Instant UI responses with automatic rollback on failure
