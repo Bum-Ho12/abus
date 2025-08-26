@@ -12,7 +12,6 @@ export 'core/mixins/bloc_mixin.dart';
 export 'core/mixins/provider_mixin.dart';
 export 'core/abus_result.dart';
 
-
 /// This library provides a queue-based system for managing complex state
 /// interactions with automatic rollback capabilities and optimistic UI updates.
 ///

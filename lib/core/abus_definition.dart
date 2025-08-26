@@ -6,7 +6,6 @@
 /// interactions that can be executed by ABUS handlers.
 library;
 
-
 /// Base interface for all interaction definitions.
 ///
 /// An interaction represents a unit of work that can be executed with

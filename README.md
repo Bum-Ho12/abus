@@ -22,7 +22,7 @@ A unified Flutter package for handling asynchronous operations with built-in opt
 
 ```yaml
 dependencies:
-  abus: ^0.0.3
+  abus: ^0.0.4
 ```
 
 ### Basic Usage

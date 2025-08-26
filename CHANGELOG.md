@@ -1,3 +1,9 @@
+## 0.0.4
+
+- Files formatted to adhere to dart conventions.
+- Improved code documentations and library guides.
+- Improvements in file documentations for easier and faster access.
+
 ## 0.0.3
 
 - Added Support for class interactions, using the withPayload to pass classes.
