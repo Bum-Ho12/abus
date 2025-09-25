@@ -53,13 +53,13 @@ This roadmap outlines the planned growth of ABUS into a broader **interaction bu
 
 ---
 
----
-
 ## Phase 7: Core Improvements
 - Expand documentation with real-world usage examples (e.g., social apps, forms, collaborative tools).
 - Provide integration adapters for more state management systems (Riverpod, GetX, MobX).
 - Improve test coverage and add stress tests for concurrency, rollback, and conflict scenarios.
 - Enhance logging and developer tooling for tracing optimistic updates and rollbacks.
+
+---
 
 ## Long-Term Vision
 The long-term goal is for ABUS to become a **universal interaction bus for Flutter applications**:
