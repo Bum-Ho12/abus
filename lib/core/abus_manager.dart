@@ -512,6 +512,11 @@ class ABUSManager {
     }
   }
 
+  /// Emit a result through the result stream (for internal system use)
+  void emitResult(ABUSResult result) {
+    _emitResult(result);
+  }
+
   /// Get pending interactions
   List<String> get pendingInteractions => _snapshots.keys.toList();
 

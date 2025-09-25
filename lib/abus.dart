@@ -12,6 +12,13 @@ export 'core/mixins/bloc_mixin.dart';
 export 'core/mixins/provider_mixin.dart';
 export 'core/abus_result.dart';
 
+// Feedback system exports
+
+export 'feedback/feedback_events.dart';
+export 'feedback/feedback_interactions.dart';
+export 'feedback/feedback_manager.dart';
+export 'feedback/feedback_bus.dart';
+
 /// This library provides a queue-based system for managing complex state
 /// interactions with automatic rollback capabilities and optimistic UI updates.
 ///
