@@ -18,6 +18,7 @@ export 'feedback/feedback_events.dart';
 export 'feedback/feedback_interactions.dart';
 export 'feedback/feedback_manager.dart';
 export 'feedback/feedback_bus.dart';
+export 'core/mixins/feedback_widget_mixin.dart';
 
 /// This library provides a queue-based system for managing complex state
 /// interactions with automatic rollback capabilities and optimistic UI updates.
