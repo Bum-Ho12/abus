@@ -18,7 +18,7 @@ This roadmap outlines the planned growth of ABUS into a broader **interaction bu
 - Implement a **SnackbarBus** to centrally manage snackbars across the entire app.
 - Prevent overlapping or delayed snackbars by introducing a queue with ordering and priority.
 - Support deduplication of identical feedback events.
-- Extend the system to handle dialogs, banners, and toasts as **FeedbackEvents**, ensuring consistent behavior across pages and navigations.
+- Extend the system to handle banners, and toasts as **FeedbackEvents**, ensuring consistent behavior across pages and navigations.
 
 ---
 
