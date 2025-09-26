@@ -1,5 +1,5 @@
 
-name: abus_example
+name: abus_cross_example
 description: Example app demonstrating ABUS cross-app communication
 publish_to: 'none'
 
