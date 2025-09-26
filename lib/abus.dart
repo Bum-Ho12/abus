@@ -5,12 +5,23 @@ import 'package:abus/core/abus_manager.dart';
 import 'package:abus/core/abus_result.dart';
 import 'package:flutter/material.dart';
 
+// Core ABUS exports
 export 'core/abus_manager.dart';
 export 'core/abus_definition.dart';
+export 'core/abus_result.dart';
+
+// Mixins
 export 'core/mixins/abus_widget_mixin.dart';
 export 'core/mixins/bloc_mixin.dart';
 export 'core/mixins/provider_mixin.dart';
-export 'core/abus_result.dart';
+export 'core/mixins/feedback_widget_mixin.dart';
+export 'core/mixins/cross_app_widget_mixin.dart';
+
+// Cross app communication exports
+export 'cross_app/app_communication_manager.dart';
+export 'cross_app/app_event.dart';
+export 'cross_app/app_interactions.dart';
+export 'cross_app/cross_app_bus.dart';
 
 // Feedback system exports
 
@@ -18,7 +29,6 @@ export 'feedback/feedback_events.dart';
 export 'feedback/feedback_interactions.dart';
 export 'feedback/feedback_manager.dart';
 export 'feedback/feedback_bus.dart';
-export 'core/mixins/feedback_widget_mixin.dart';
 
 /// This library provides a queue-based system for managing complex state
 /// interactions with automatic rollback capabilities and optimistic UI updates.
