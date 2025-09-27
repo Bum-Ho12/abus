@@ -148,45 +148,64 @@ class CrossAppDiagnostics {
   }
 }
 
-class DiagnosticApp extends StatefulWidget {
+class DiagnosticApp extends StatelessWidget {
   const DiagnosticApp({super.key});
 
   @override
-  State<DiagnosticApp> createState() => _DiagnosticAppState();
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      home: DiagnosticHomePage(),
+    );
+  }
 }
 
-class _DiagnosticAppState extends State<DiagnosticApp> {
+class DiagnosticHomePage extends StatefulWidget {
+  const DiagnosticHomePage({super.key});
+
+  @override
+  State<DiagnosticHomePage> createState() => _DiagnosticHomePageState();
+}
+
+class _DiagnosticHomePageState extends State<DiagnosticHomePage> {
   String _status = 'Checking initialization...';
   bool _isInitialized = false;
+  String _lastMessage = '';
 
   @override
   void initState() {
     super.initState();
-    _checkStatus();
+    // Delay the status check to ensure the widget tree is built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkStatus();
+    });
   }
 
   Future<void> _checkStatus() async {
     try {
       // Try to access the manager
       final manager = AppCommunicationManager.instance;
-      debugPrint('Manager, $manager');
+      debugPrint('Manager: $manager');
 
       // Check if initialized (this is a mock check - you'd need proper status checking)
-      setState(() {
-        _isInitialized = true;
-        _status = 'Cross-app communication is working!';
-      });
+      if (mounted) {
+        setState(() {
+          _isInitialized = true;
+          _status = 'Cross-app communication is working!';
+        });
+      }
     } catch (e) {
-      setState(() {
-        _isInitialized = false;
-        _status = 'Error: $e';
-      });
+      if (mounted) {
+        setState(() {
+          _isInitialized = false;
+          _status = 'Error: $e';
+        });
+      }
     }
   }
 
   Future<void> _testSendIntent() async {
     if (!_isInitialized) {
-      _showError('Not initialized');
+      _setMessage('Not initialized', isError: true);
       return;
     }
 
@@ -196,122 +215,132 @@ class _DiagnosticAppState extends State<DiagnosticApp> {
         extras: {'test': 'diagnostic'},
       );
 
-      _showResult(
-          'Intent test: ${result.isSuccess ? 'SUCCESS' : 'FAILED: ${result.error}'}');
+      _setMessage(
+        'Intent test: ${result.isSuccess ? 'SUCCESS' : 'FAILED: ${result.error}'}',
+        isError: !result.isSuccess,
+      );
     } catch (e) {
-      _showError('Intent test failed: $e');
+      _setMessage('Intent test failed: $e', isError: true);
     }
   }
 
-  void _showResult(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.green),
-    );
-  }
+  void _setMessage(String message, {bool isError = false}) {
+    debugPrint(isError ? 'Error: $message' : 'Result: $message');
+    if (mounted) {
+      setState(() {
+        _lastMessage = message;
+      });
 
-  void _showError(String message) {
-    debugPrint('Error: $message');
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
-    );
+      // Now ScaffoldMessenger should be available
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: isError ? Colors.red : Colors.green,
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        appBar: AppBar(
-          title: const Text('ABUS Cross-App Diagnostics'),
-          backgroundColor: _isInitialized ? Colors.green : Colors.red,
-        ),
-        body: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Card(
-                color:
-                    _isInitialized ? Colors.green.shade50 : Colors.red.shade50,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            _isInitialized ? Icons.check_circle : Icons.error,
-                            color: _isInitialized ? Colors.green : Colors.red,
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('ABUS Cross-App Diagnostics'),
+        backgroundColor: _isInitialized ? Colors.green : Colors.red,
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Card(
+              color: _isInitialized ? Colors.green.shade50 : Colors.red.shade50,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          _isInitialized ? Icons.check_circle : Icons.error,
+                          color: _isInitialized ? Colors.green : Colors.red,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Initialization Status',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
                           ),
-                          const SizedBox(width: 8),
-                          const Text(
-                            'Initialization Status',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(_status),
+                    if (_lastMessage.isNotEmpty) ...[
                       const SizedBox(height: 8),
-                      Text(_status),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Quick Tests',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 10),
-              ElevatedButton(
-                onPressed: _isInitialized ? _testSendIntent : null,
-                child: const Text('Test Send Intent'),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Troubleshooting Steps',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 10),
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildTroubleshootingCard(
-                        'Step 1: Check File Structure',
-                        [
-                          'Ensure lib/cross_app/ directory exists',
-                          'Check for app_communication_manager.dart',
-                          'Check for cross_app_bus.dart',
-                          'Check for app_event.dart',
-                          'Check for app_interactions.dart',
-                        ],
-                      ),
-                      _buildTroubleshootingCard(
-                        'Step 2: Check Exports',
-                        [
-                          'Open lib/abus.dart',
-                          'Add cross-app exports if missing',
-                          'Run "flutter pub get"',
-                        ],
-                      ),
-                      _buildTroubleshootingCard(
-                        'Step 3: Check Initialization',
-                        [
-                          'Call CrossAppBus.initialize() before runApp()',
-                          'Use await with WidgetsFlutterBinding.ensureInitialized()',
-                          'Check console for detailed error messages',
-                        ],
+                      Text(
+                        'Last result: $_lastMessage',
+                        style: const TextStyle(fontStyle: FontStyle.italic),
                       ),
                     ],
-                  ),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Quick Tests',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            ElevatedButton(
+              onPressed: _isInitialized ? _testSendIntent : null,
+              child: const Text('Test Send Intent'),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Troubleshooting Steps',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildTroubleshootingCard(
+                      'Step 1: Check File Structure',
+                      [
+                        'Ensure lib/cross_app/ directory exists',
+                        'Check for app_communication_manager.dart',
+                        'Check for cross_app_bus.dart',
+                        'Check for app_event.dart',
+                        'Check for app_interactions.dart',
+                      ],
+                    ),
+                    _buildTroubleshootingCard(
+                      'Step 2: Check Exports',
+                      [
+                        'Open lib/abus.dart',
+                        'Add cross-app exports if missing',
+                        'Run "flutter pub get"',
+                      ],
+                    ),
+                    _buildTroubleshootingCard(
+                      'Step 3: Check Initialization',
+                      [
+                        'Call CrossAppBus.initialize() before runApp()',
+                        'Use await with WidgetsFlutterBinding.ensureInitialized()',
+                        'Check console for detailed error messages',
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -390,4 +419,24 @@ class MockCrossAppBus {
       sharedStoragePaths: sharedStoragePaths,
     );
   }
+
+  static Future<MockResult> sendIntent({
+    required String action,
+    Map<String, dynamic>? extras,
+  }) async {
+    // Mock implementation
+    return MockResult(isSuccess: true);
+  }
 }
+
+class MockResult {
+  final bool isSuccess;
+  final String? error;
+
+  MockResult({required this.isSuccess, this.error});
+}
+
+// Add these type aliases if the real classes don't exist
+typedef AppPermission = MockAppPermission;
+typedef AppCommunicationManager = MockAppCommunicationManager;
+typedef CrossAppBus = MockCrossAppBus;
