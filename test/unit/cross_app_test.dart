@@ -38,14 +38,14 @@ void main() {
       final event = UrlEvent(
         id: 'test_url',
         sourceApp: 'test_app',
-        scheme: 'myapp',
+        scheme: 'my_app',
         path: 'user/profile',
         queryParams: {'userId': '123', 'tab': 'settings'},
       );
 
-      expect(event.scheme, 'myapp');
+      expect(event.scheme, 'my_app');
       expect(event.path, 'user/profile');
-      expect(event.fullUrl, 'myapp://user/profile?userId=123&tab=settings');
+      expect(event.fullUrl, 'my_app://user/profile?userId=123&tab=settings');
 
       final json = event.toJson();
       final restored = UrlEvent.fromJson(json);
@@ -116,7 +116,7 @@ void main() {
       final appEvent = UrlEvent(
         id: 'test',
         sourceApp: 'app',
-        scheme: 'myapp',
+        scheme: 'my_app',
         path: 'test',
       );
 
@@ -129,7 +129,7 @@ void main() {
 
       final retrievedEvent = interaction.event;
       expect(retrievedEvent, isA<UrlEvent>());
-      expect((retrievedEvent as UrlEvent).scheme, 'myapp');
+      expect((retrievedEvent as UrlEvent).scheme, 'my_app');
     });
   });
 
@@ -303,7 +303,7 @@ void main() {
 
       try {
         await CrossAppBus.openUrl(
-          scheme: 'myapp',
+          scheme: 'my_app',
           path: 'test/path',
           queryParams: {'param': 'value'},
         );

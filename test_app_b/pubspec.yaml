@@ -1,0 +1,22 @@
+name: test_app_b
+description: ABUS Cross-App Communication Test App B
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.0.0
+  flutter: ^3.10.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  abus:
+    path: ../
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true

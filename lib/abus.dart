@@ -15,7 +15,6 @@ export 'core/mixins/abus_widget_mixin.dart';
 export 'core/mixins/bloc_mixin.dart';
 export 'core/mixins/provider_mixin.dart';
 export 'core/mixins/feedback_widget_mixin.dart';
-export 'core/mixins/cross_app_widget_mixin.dart';
 
 // Cross app communication exports
 export 'cross_app/app_communication_manager.dart';
