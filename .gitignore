@@ -31,3 +31,6 @@ migrate_working_dir/
 build/
 
 CHANGE.md
+
+# FVM Version Cache
+.fvm/
