@@ -797,6 +797,7 @@ if (user != null) {
 
 ABUS provides a built-in feedback system for displaying user notifications like snackbars, banners, and toasts. This system is integrated with the interaction queue and can persist feedback across app restarts if configured.
 
+
 ### FeedbackBus
 
 The `FeedbackBus` is the main entry point for showing feedback.

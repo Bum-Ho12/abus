@@ -146,6 +146,10 @@ class UserProvider extends ChangeNotifier with AbusProvider {
 
 ABUS includes a built-in feedback system for displaying toasts, banners, and snackbars that persists across app restarts if configured.
 
+### System Flow
+
+![ABUS APP To APP Flow](doc/app_to_app.svg)
+
 ```dart
 // Show a snackbar
 await FeedbackBus.showSnackbar(
