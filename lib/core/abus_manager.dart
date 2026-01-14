@@ -4,6 +4,7 @@ import 'dart:collection';
 import 'package:flutter/material.dart';
 import 'package:abus/core/abus_definition.dart';
 import 'package:abus/core/abus_result.dart';
+import 'package:abus/core/abus_storage.dart';
 
 /// Base interface for any state handler
 abstract class AbusHandler {
@@ -167,6 +168,10 @@ class ABUSManager {
       [];
   final _InteractionQueue _queue = _InteractionQueue();
 
+  // Storage for persistence
+  AbusStorage? _storage;
+  AbusStorage? get storage => _storage;
+
   // State management with size limits using LinkedHashMap for LRU(Least Recently Used) behavior
   final LinkedHashMap<String, StateSnapshot> _snapshots = LinkedHashMap();
   final Map<String, Timer> _rollbackTimers = {};
@@ -183,6 +188,12 @@ class ABUSManager {
       Future<ABUSResult> Function(InteractionDefinition) handler) {
     if (_disposed) return;
     _apiHandlers.add(handler);
+  }
+
+  /// Set the storage implementation for persistence
+  void setStorage(AbusStorage storage) {
+    if (_disposed) return;
+    _storage = storage;
   }
 
   /// Register any type of handler
@@ -234,6 +245,12 @@ class ABUSManager {
       // Auto-discover handlers if context provided
       if (context != null) {
         _discoverHandlers(context);
+      }
+
+      // Persist interaction if storage is available
+      if (_storage != null) {
+        await _storage!
+            .save('interaction_$interactionId', interaction.toJson());
       }
 
       // Find compatible handlers

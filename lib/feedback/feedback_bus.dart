@@ -98,8 +98,21 @@ class FeedbackBus {
   /// Get current queue state
   static List<FeedbackEvent> get queue => FeedbackManager.instance.queue;
 
-  /// Initialize the feedback system
-  static void initialize() {
-    ABUS.registerHandler(FeedbackManager.instance);
+  /// Initialize the feedback system with optional storage persistence
+  static Future<void> initialize({AbusStorage? storage}) async {
+    if (storage != null) {
+      ABUS.manager.setStorage(storage);
+    }
+
+    final manager = FeedbackManager.instance;
+    ABUS.registerHandler(manager);
+
+    // Initialize storage-backed queue if storage is available
+    await manager.initStorage();
+  }
+
+  /// Manually sync feedback from storage (useful for cross-app updates)
+  static Future<void> sync() async {
+    await ABUS.manager.storage?.sync();
   }
 }

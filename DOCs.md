@@ -792,7 +792,105 @@ if (user != null) {
 }
 ```
 
+
+## Feedback System
+
+ABUS provides a built-in feedback system for displaying user notifications like snackbars, banners, and toasts. This system is integrated with the interaction queue and can persist feedback across app restarts if configured.
+
+
+### FeedbackBus
+
+The `FeedbackBus` is the main entry point for showing feedback.
+
+```dart
+// Show a snackbar
+await FeedbackBus.showSnackbar(
+  message: 'Settings saved',
+  type: SnackbarType.success,
+  duration: Duration(seconds: 4),
+  actionLabel: 'UNDO',
+  onAction: () async {
+    // Handle undo
+  },
+);
+
+// Show a persistent banner
+await FeedbackBus.showBanner(
+  message: 'No internet connection',
+  type: BannerType.error,
+  actions: [
+      BannerAction(
+        label: 'Retry',
+        onPressed: () => retryConnection(),
+      ),
+  ],
+);
+
+// Show a toast
+await FeedbackBus.showToast(
+  message: 'Draft saved',
+  type: ToastType.info,
+);
+```
+
+### Feedback Types
+
+- **Snackbar**: Transient messages at the bottom of the screen, optionally with an action.
+- **Banner**: Persistent messages at the top of the content area, creating a dedicated space.
+- **Toast**: Brief, non-intrusive messages that effectively "float" over the UI.
+
+### Persistence
+
+When `ABUS.setStorage()` is configured, feedback events can be persisted. This means if a user closes the app while a banner is displayed, it will reappear when they reopen the app (unless it was dismissed or expired).
+
+```dart
+// Initialize with storage for persistence
+await FeedbackBus.initialize(storage: MyStorageImpl());
+```
+
+## Storage & Cross-App Communication
+
+ABUS is designed to work in multi-app ecosystems where different Flutter apps need to share data or coordinate actions.
+
+### AbusStorage Interface
+
+The `AbusStorage` interface allows you to implement custom persistence strategies.
+
+```dart
+abstract class AbusStorage {
+  Future<void> save(String key, Map<String, dynamic> data);
+  Future<Map<String, dynamic>?> read(String key);
+  Future<void> delete(String key);
+  Future<void> clear();
+  Stream<Map<String, dynamic>> get updates; // Listen for external changes
+}
+```
+
+### AndroidSharedStorage
+
+Specific implementation for Android that uses a shared directory (e.g., external storage) to allow communication between apps signed by the same certificate or with shared storage permissions.
+
+```dart
+// 1. Setup shared storage
+final storage = AndroidSharedStorage(
+  Directory('/sdcard/Android/data/com.mycompany.shared/files'),
+  syncInterval: Duration(seconds: 5), // Check for updates every 5s
+);
+
+ABUS.setStorage(storage);
+
+// 2. Apps can now share data and trigger interactions in each other
+// (assuming they both watch the same storage directory)
+```
+
+This effectively allows one app to "post" an interaction or feedback event that another app picks up and handles, enabling workflows like:
+- App A triggers a "Sync" operation.
+- App B (background service) sees the request, performs the sync.
+- App B writes a "Sync Complete" feedback event.
+- App A sees the feedback event and shows a Snackbar to the user.
+
 ## Conclusion
+
 
 With the addition of class-based interactions and typed results, ABUS now provides both flexibility and type safety. You can choose the approach that best fits your use case:
 

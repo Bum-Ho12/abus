@@ -142,6 +142,56 @@ class UserProvider extends ChangeNotifier with AbusProvider {
 }
 ```
 
+### 💬 Feedback System
+
+ABUS includes a built-in feedback system for displaying toasts, banners, and snackbars that persists across app restarts if configured.
+
+### System Flow
+
+![ABUS APP To APP Flow](doc/app_to_app.svg)
+
+```dart
+// Show a snackbar
+await FeedbackBus.showSnackbar(
+  message: 'Operation completed',
+  type: SnackbarType.success,
+  actionLabel: 'UNDO',
+  onAction: () => undoOperation(),
+);
+
+// Show a banner
+await FeedbackBus.showBanner(
+  message: 'Please update your profile',
+  type: BannerType.warning,
+  actions: [
+    BannerAction(label: 'Update', onPressed: () => navigateToProfile()),
+    BannerAction(label: 'Dismiss', onPressed: () => dismissBanner()),
+  ],
+);
+```
+
+### 💾 Storage & Cross-App Communication
+
+ABUS supports swappable storage backends, including `AndroidSharedStorage` for communicating between apps signed by the same developer.
+
+```dart
+void main() async {
+  // Use Android shared storage for cross-app data sharing
+  final storageDir = Directory('/sdcard/Android/data/com.example/files');
+  final storage = AndroidSharedStorage(
+    storageDir,
+    syncInterval: Duration(seconds: 5),
+  );
+  
+  ABUS.setStorage(storage);
+  
+  // Initialize feedback system with storage
+  await FeedbackBus.initialize(storage: storage);
+  
+  runApp(MyApp());
+}
+```
+
 ## Advanced Features
 
 ### Custom Interactions
