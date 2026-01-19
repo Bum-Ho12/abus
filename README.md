@@ -145,11 +145,11 @@ class UserProvider extends ChangeNotifier with AbusProvider {
 
 ### 💬 Feedback System
 
-ABUS includes a built-in feedback system for displaying toasts, banners, and snackbars that persists across app restarts if configured.
+ABUS includes a built-in feedback system for displaying toasts, banners, and snackbars that persists across app restarts if configured. [Read full documentation](DOCs.md#feedback-system)
 
 ### System Flow
 
-![ABUS APP To APP Flow](doc/app_feedback_flow.svg)
+![ABUS Feedback Flow](doc/app_feedback_flow.svg)
 
 ```dart
 // Show a snackbar
@@ -173,7 +173,10 @@ await FeedbackBus.showBanner(
 
 ### 💾 Storage & Cross-App Communication
 
-ABUS supports swappable storage backends, including `AndroidSharedStorage` for communicating between apps signed by the same developer.
+ABUS supports swappable storage backends, including `AndroidSharedStorage` for communicating between apps signed by the same developer. [Read full documentation](DOCs.md#storage--cross-app-communication)
+
+![ABUS APP To APP Flow](doc/app_feedback_flow.svg)
+
 
 **Features:**
 - **Smart Sync**: Detects changes to minimize redundant updates.
