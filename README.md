@@ -11,7 +11,8 @@ A unified Flutter package for handling asynchronous operations with built-in opt
 - 🚀 **Optimistic Updates** - Instant UI responses with automatic rollback on failure
 - 🔄 **Universal Integration** - Works with BLoC, Provider, setState, or any state management
 - 🛡️ **Race Condition Prevention** - Intelligent operation queuing
-- 📱 **Widget Reactive Updates** - Automatic UI updates based on operation results
+- � **Smart Storage** - Optimized cross-app communication with file locking and change detection
+- �📱 **Widget Reactive Updates** - Automatic UI updates based on operation results
 - 🎯 **Type-Safe Operations** - Define operations once, use everywhere
 - 🔧 **Zero Boilerplate** - Minimal setup, maximum functionality
 - 📊 **Built-in Analytics** - Operation tracking and error monitoring
@@ -22,7 +23,7 @@ A unified Flutter package for handling asynchronous operations with built-in opt
 
 ```yaml
 dependencies:
-  abus: ^0.0.4
+  abus: ^0.0.6
 ```
 
 ### Basic Usage

@@ -1,3 +1,6 @@
+## 0.0.6
+- Updated README documentation to reflect recent changes and version bump.
+
 ## 0.0.5
 - **Feedback System Reliability**: Significantly improved cross-app feedback stability by optimizing the underlying shared storage mechanism.
 - **Performance Optimization**: Implemented "Smart Sync" in `AndroidSharedStorage` to detect actual content changes, eliminating redundant updates and reducing resource usage.
