@@ -797,6 +797,15 @@ if (user != null) {
 
 ABUS provides a built-in feedback system for displaying user notifications like snackbars, banners, and toasts. This system is integrated with the interaction queue and can persist feedback across app restarts if configured.
 
+### System Flow
+
+```mermaid
+graph LR
+    App[Your App] -->|1. Request| FB[FeedbackBus]
+    FB -->|2. Process| ABUS[ABUS System]
+    ABUS -->|3. Display| UI[User Interface]
+    ABUS -.->|4. Persist| Storage[Storage]
+```
 
 ### FeedbackBus
 
@@ -870,6 +879,10 @@ abstract class AbusStorage {
 
 Specific implementation for Android that uses a shared directory (e.g., external storage) to allow communication between apps signed by the same certificate or with shared storage permissions.
 
+**Optimized for Performance & Safety:**
+- **Smart Sync**: Automatically detects file content changes to avoid redundant updates and processing.
+- **Concurrent Safety**: Uses exclusive file locking during writes to prevent race conditions in multi-app scenarios.
+
 ```dart
 // 1. Setup shared storage
 final storage = AndroidSharedStorage(
@@ -888,6 +901,10 @@ This effectively allows one app to "post" an interaction or feedback event that 
 - App B (background service) sees the request, performs the sync.
 - App B writes a "Sync Complete" feedback event.
 - App A sees the feedback event and shows a Snackbar to the user.
+
+### Cross-App Flow
+
+![Cross-App Flow](doc/cross_app_flow.png)
 
 ## Conclusion
 

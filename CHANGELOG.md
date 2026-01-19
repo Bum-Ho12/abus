@@ -1,3 +1,10 @@
+## 0.0.5
+- **Feedback System Reliability**: Significantly improved cross-app feedback stability by optimizing the underlying shared storage mechanism.
+- **Performance Optimization**: Implemented "Smart Sync" in `AndroidSharedStorage` to detect actual content changes, eliminating redundant updates and reducing resource usage.
+- **Concurrency Safety**: Added exclusive file locking for storage write operations to prevent race conditions during simultaneous cross-app communication.
+- **Documentation**: Fixed rendering issues with flow diagrams and updated documentation with new storage optimization details.
+- **Refactoring**: Minor code cleanup and modernization in storage constructors.
+
 ## 0.0.4
 
 - Files formatted to adhere to dart conventions.

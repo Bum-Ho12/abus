@@ -148,7 +148,7 @@ ABUS includes a built-in feedback system for displaying toasts, banners, and sna
 
 ### System Flow
 
-![ABUS APP To APP Flow](doc/app_to_app.svg)
+![ABUS APP To APP Flow](doc/app_feedback_flow.svg)
 
 ```dart
 // Show a snackbar
@@ -173,6 +173,10 @@ await FeedbackBus.showBanner(
 ### 💾 Storage & Cross-App Communication
 
 ABUS supports swappable storage backends, including `AndroidSharedStorage` for communicating between apps signed by the same developer.
+
+**Features:**
+- **Smart Sync**: Detects changes to minimize redundant updates.
+- **File Locking**: Prevents race conditions during cross-app writes.
 
 ```dart
 void main() async {
