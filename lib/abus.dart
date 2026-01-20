@@ -3,6 +3,7 @@
 import 'package:abus/core/abus_definition.dart';
 import 'package:abus/core/abus_manager.dart';
 import 'package:abus/core/abus_result.dart';
+import 'package:abus/core/abus_storage.dart';
 import 'package:flutter/material.dart';
 
 export 'core/abus_manager.dart';
@@ -11,6 +12,10 @@ export 'core/mixins/abus_widget_mixin.dart';
 export 'core/mixins/bloc_mixin.dart';
 export 'core/mixins/provider_mixin.dart';
 export 'core/abus_result.dart';
+export 'core/abus_storage.dart';
+export 'core/storage/in_memory_storage.dart';
+export 'core/storage/file_storage.dart';
+export 'core/storage/android_shared_storage.dart';
 
 // Feedback system exports
 
@@ -52,6 +57,11 @@ class ABUS {
 
   /// Access to the singleton [ABUSManager] instance.
   static ABUSManager get manager => ABUSManager.instance;
+
+  /// Sets the storage implementation for persistence and cross-app communication.
+  static void setStorage(AbusStorage storage) {
+    manager.setStorage(storage);
+  }
 
   /// Executes an interaction without Flutter context.
   ///

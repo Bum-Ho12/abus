@@ -248,7 +248,7 @@ await ABUS.execute(interaction);
 class ABUSResult {
   final bool isSuccess;
   final Map<String, dynamic>? data;
-  final Object? payload;               // NEW: Typed payload support
+  final Object? payload;               // Typed payload support
   final String? error;
   final DateTime timestamp;
   final String? interactionId;
@@ -792,7 +792,125 @@ if (user != null) {
 }
 ```
 
+
+## Feedback System
+
+ABUS provides a comprehensive feedback system for managing user notifications. It supports ranking, queuing, and persistence, ensuring that important messages are seen even across app restarts.
+
+### System Flow
+
+```mermaid
+graph LR
+    App[Your App] -->|1. Request| FB[FeedbackBus]
+    FB -->|2. Process| ABUS[ABUS System]
+    ABUS -->|3. Display| UI[User Interface]
+    ABUS -.->|4. Persist| Storage[Storage]
+```
+
+### FeedbackBus API
+
+The `FeedbackBus` is the central controller for all feedback events.
+
+#### Showing Feedback
+
+```dart
+// Show a snackbar (Standard notifications)
+await FeedbackBus.showSnackbar(
+  message: 'Settings saved',
+  type: SnackbarType.success,
+  duration: Duration(seconds: 4),
+  actionLabel: 'UNDO',
+  onAction: () async {
+    // Handle undo
+  },
+  tags: {'settings', 'user'}, // For categorization
+  priority: 0,
+);
+
+// Show a banner (Persistent, high visibility)
+await FeedbackBus.showBanner(
+  message: 'No internet connection',
+  type: BannerType.error,
+  actions: [
+      BannerAction(
+        label: 'Retry',
+        onPressed: () => retryConnection(),
+      ),
+  ],
+  priority: 10, // Higher priority displays on top
+);
+
+// Show a toast (Transient, floating)
+await FeedbackBus.showToast(
+  message: 'Draft saved',
+  type: ToastType.info,
+);
+```
+
+#### Managing Feedback
+
+You can programmatically dismiss feedback using IDs or tags.
+
+```dart
+// Dismiss specific event
+await FeedbackBus.dismiss('banner_123');
+
+// Dismiss all feedback related to 'network'
+await FeedbackBus.dismissByTags({'network'});
+
+// clear everything
+await FeedbackBus.dismissAll();
+```
+
+### Feedback Configuration
+
+| Feature | Description |
+|---------|-------------|
+| **Priority** | Integer value. Higher priority events are displayed first. Banners typically have higher priority than snackbars. |
+| **Tags** | Set of strings used for categorization and bulk management (e.g., dismissing all 'network' errors). |
+| **Duration** | How long the feedback persists. `null` duration usually means "until dismissed" (common for banners). |
+| **Persistence** | If a storage backend is configured, valid feedback events persist across app restarts. |
+
+---
+
+## Storage & Cross-App Communication
+
+ABUS is architected to support complex multi-app ecosystems. Using the `AndroidSharedStorage` backend, different apps (signed by the same certificate) can share state, synchronize interactions, and broadcast feedback events.
+
+### AndroidSharedStorage
+
+This implementation uses a shared directory on the Android filesystem to exchange data. It employs file locking and content hashing to ensure data integrity and performance.
+
+```dart
+// Configure storage in main()
+final storageDir = Directory('/sdcard/Android/data/com.example/files');
+final storage = AndroidSharedStorage(
+  storageDir,
+  syncInterval: Duration(seconds: 10), // Polling interval for changes
+);
+
+ABUS.setStorage(storage);
+await FeedbackBus.initialize(storage: storage);
+```
+
+### Key Capabilities
+
+1.  **File Locking**: Uses `RandomAccessFile` with exclusive locking. This prevents two apps from writing to the same file simultaneously, avoiding data corruption in high-concurrency scenarios.
+2.  **Smart Sync**: The storage system maintains a hash of the file content. It only triggers updates when the actual content changes, minimizing unnecessary parsing and UI rebuilds.
+3.  **Automatic Polling**: The `syncInterval` determines how often the app checks for external changes.
+4.  **Manual Sync**: You can force a sync operation using `FeedbackBus.sync()` or `storage.sync()` if you know an external change has occurred (e.g., via a platform channel event).
+
+### Cross-App Workflow Example
+
+1.  **App A** (Foreground) and **App B** (Background Service) share the same `storageDir`.
+2.  **App B** completes a background sync and writes a `SnackbarEvent` to storage.
+3.  **App A**'s `AndroidSharedStorage` detects the new file during its poll cycle.
+4.  **App A** emits the event, and the user sees "Sync Completed" in the foreground app.
+
+![Cross-App Flow](doc/cross_app_flow.png)
+
 ## Conclusion
+
 
 With the addition of class-based interactions and typed results, ABUS now provides both flexibility and type safety. You can choose the approach that best fits your use case:
 

@@ -1,5 +1,6 @@
 // lib/feedback/feedback_manager.dart
 
+import 'dart:async';
 import 'package:abus/core/abus_definition.dart';
 import 'package:abus/core/abus_manager.dart';
 import 'package:abus/core/abus_result.dart';
@@ -17,6 +18,10 @@ class FeedbackManager extends CustomAbusHandler {
   final List<FeedbackEvent> _queue = [];
   final Set<String> _activeDeduplicationKeys = {};
   final Map<String, FeedbackEvent> _activeEvents = {};
+  StreamSubscription? _storageSubscription;
+
+  // Storage key
+  static const String _storageKey = 'abus_feedback_queue';
 
   // Configuration
   static const int _maxQueueSize = 20;
@@ -29,7 +34,70 @@ class FeedbackManager extends CustomAbusHandler {
   @override
   bool canHandle(InteractionDefinition interaction) {
     return interaction.id.startsWith('show_feedback') ||
-        interaction.id == 'dismiss_feedback';
+        interaction.id == 'dismiss_feedback' ||
+        interaction.id == 'sync_feedback';
+  }
+
+  /// Initialize storage and load existing queue
+  Future<void> initStorage() async {
+    final storage = ABUSManager.instance.storage;
+    if (storage == null) return;
+
+    // Load initial data
+    final data = await storage.load(_storageKey);
+    if (data != null && data['queue'] is List) {
+      _updateFromSerializedData(data);
+    }
+
+    // Watch for external changes (cross-app sync)
+    _storageSubscription?.cancel();
+    _storageSubscription = storage.watch(_storageKey).listen((data) {
+      if (data != null) {
+        _updateFromSerializedData(data, notify: true);
+      }
+    });
+  }
+
+  void _updateFromSerializedData(Map<String, dynamic> data,
+      {bool notify = false}) {
+    final serializedQueue = data['queue'] as List;
+    _queue.clear();
+    _activeEvents.clear();
+
+    for (final item in serializedQueue) {
+      try {
+        final interaction = ShowFeedbackInteraction(
+          event: _deserializeEvent(item as Map<String, dynamic>),
+        );
+        final event = interaction.event;
+        _queue.add(event);
+        _activeEvents[event.id] = event;
+        _activeDeduplicationKeys.add(event.deduplicationKey);
+      } catch (e) {
+        // Skip invalid events
+      }
+    }
+
+    // Sort queue
+    _queue.sort((a, b) => b.priority.compareTo(a.priority));
+
+    if (notify) {
+      _notifyQueueChanged(persist: false);
+    }
+  }
+
+  FeedbackEvent _deserializeEvent(Map<String, dynamic> data) {
+    final type = data['type'] as String;
+    switch (type) {
+      case 'SnackbarEvent':
+        return ShowFeedbackInteraction.createSnackbarEvent(data);
+      case 'BannerEvent':
+        return ShowFeedbackInteraction.createBannerEvent(data);
+      case 'ToastEvent':
+        return ShowFeedbackInteraction.createToastEvent(data);
+      default:
+        throw ArgumentError('Unknown feedback event type: $type');
+    }
   }
 
   @override
@@ -114,7 +182,20 @@ class FeedbackManager extends CustomAbusHandler {
     }
   }
 
-  void _notifyQueueChanged() {
+  Future<void> _persistQueue() async {
+    final storage = ABUSManager.instance.storage;
+    if (storage == null) return;
+
+    await storage.save(_storageKey, {
+      'queue': _queue.map((e) => e.toJson()).toList(),
+      'updatedAt': DateTime.now().toIso8601String(),
+    });
+  }
+
+  void _notifyQueueChanged({bool persist = true}) {
+    if (persist) {
+      _persistQueue();
+    }
     // Emit a custom result through the ABUS result stream to notify widgets
     final result = ABUSResult.success(
       data: {

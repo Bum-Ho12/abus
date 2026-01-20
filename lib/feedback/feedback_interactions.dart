@@ -30,17 +30,17 @@ class ShowFeedbackInteraction extends GenericInteraction {
 
     switch (type) {
       case 'SnackbarEvent':
-        return _createSnackbarEvent(eventData);
+        return createSnackbarEvent(eventData);
       case 'BannerEvent':
-        return _createBannerEvent(eventData);
+        return createBannerEvent(eventData);
       case 'ToastEvent':
-        return _createToastEvent(eventData);
+        return createToastEvent(eventData);
       default:
         throw ArgumentError('Unknown feedback event type: $type');
     }
   }
 
-  static SnackbarEvent _createSnackbarEvent(Map<String, dynamic> data) {
+  static SnackbarEvent createSnackbarEvent(Map<String, dynamic> data) {
     return SnackbarEvent(
       id: data['id'],
       message: data['message'],
@@ -57,7 +57,7 @@ class ShowFeedbackInteraction extends GenericInteraction {
     );
   }
 
-  static BannerEvent _createBannerEvent(Map<String, dynamic> data) {
+  static BannerEvent createBannerEvent(Map<String, dynamic> data) {
     return BannerEvent(
       id: data['id'],
       message: data['message'],
@@ -72,7 +72,7 @@ class ShowFeedbackInteraction extends GenericInteraction {
     );
   }
 
-  static ToastEvent _createToastEvent(Map<String, dynamic> data) {
+  static ToastEvent createToastEvent(Map<String, dynamic> data) {
     return ToastEvent(
       id: data['id'],
       message: data['message'],
