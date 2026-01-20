@@ -248,7 +248,7 @@ await ABUS.execute(interaction);
 class ABUSResult {
   final bool isSuccess;
   final Map<String, dynamic>? data;
-  final Object? payload;               // NEW: Typed payload support
+  final Object? payload;               // Typed payload support
   final String? error;
   final DateTime timestamp;
   final String? interactionId;
@@ -824,7 +824,7 @@ await FeedbackBus.showSnackbar(
     // Handle undo
   },
   tags: {'settings', 'user'}, // For categorization
-  priority: 0, 
+  priority: 0,
 );
 
 // Show a banner (Persistent, high visibility)
