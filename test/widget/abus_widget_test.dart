@@ -1,551 +1,604 @@
-// test/widget/abus_widget_test.dart
+// main.dart
 import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
 import 'package:abus/abus.dart';
+import 'dart:async';
+import 'dart:math';
 
 void main() {
-  group('ABUS Widget Tests', () {
-    setUp(() {
-      ABUSManager.reset();
-    });
+  runApp(const MyApp());
+}
 
-    tearDown(() {
-      ABUS.manager.dispose();
-    });
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
-    testWidgets('should rebuild widget on ABUS result', (tester) async {
-      final handler = WidgetTestHandler();
-      ABUS.registerHandler(handler);
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'ABUS Demo',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        visualDensity: VisualDensity.adaptivePlatformDensity,
+      ),
+      home: const TodoListPage(),
+    );
+  }
+}
 
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: TestWidget(),
-        ),
-      );
+// Data Models
+class Todo {
+  final String id;
+  final String title;
+  final bool completed;
+  final DateTime createdAt;
 
-      // Verify initial state
-      expect(find.text('Count: 0'), findsOneWidget);
-
-      // Execute interaction
-      final interaction = ABUS
-          .builder()
-          .withId('widget_test')
-          .addData('increment', 1)
-          .addTag('counter')
-          .build();
-
-      await ABUS.execute(interaction);
-      await tester.pump(const Duration(seconds: 31)); // Trigger rebuild
-
-      // Verify updated state
-      expect(find.text('Count: 1'), findsOneWidget);
-    });
-
-    testWidgets('should filter results by configuration', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: FilteredTestWidget(),
-        ),
-      );
-
-      // Verify initial state
-      expect(find.text('Filtered Count: 0'), findsOneWidget);
-
-      // Execute interaction that should be filtered out
-      final filteredInteraction = ABUS
-          .builder()
-          .withId('filtered_test')
-          .addData('should_filter', true)
-          .addTag('update')
-          .build();
-
-      ABUS.registerApiHandler((interaction) async {
-        return ABUSResult.success(interactionId: interaction.id);
-      });
-
-      await ABUS.execute(filteredInteraction);
-      await tester.pump();
-
-      // Still 0 because filtered
-      expect(find.text('Filtered Count: 0'), findsOneWidget);
-
-      // Execute interaction that should not be filtered
-      final unFilteredInteraction = ABUS
-          .builder()
-          .withId('unfiltered_test')
-          .addData('should_filter', false)
-          .addTag('update')
-          .build();
-
-      await ABUS.execute(unFilteredInteraction);
-      await tester.pump(const Duration(seconds: 31));
-
-      // Should now show updated state
-      expect(find.text('Filtered Count: 1'), findsOneWidget);
-    });
-
-    testWidgets('should handle interaction execution from widget',
-        (tester) async {
-      final handler = WidgetTestHandler();
-      ABUS.registerHandler(handler);
-
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: InteractiveTestWidget(),
-        ),
-      );
-
-      // Tap the button to trigger interaction
-      await tester.tap(find.byType(ElevatedButton));
-      await tester.pump(const Duration(seconds: 31));
-
-      // Verify interaction was executed and widget updated
-      expect(find.text('Button Pressed: 1'), findsOneWidget);
-    });
-
-    testWidgets('should handle optimistic updates with rollback',
-        (tester) async {
-      final handler = RollbackTestHandler();
-      ABUS.registerHandler(handler);
-
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: OptimisticTestWidget(),
-        ),
-      );
-
-      expect(find.text('Status: idle'), findsOneWidget);
-
-      // Trigger optimistic interaction that will fail
-      await tester.tap(find.byType(GestureDetector));
-
-      // Processing is set immediately
-      expect(find.text('Status: processing'), findsOneWidget);
-
-      // Wait for API failure and rollback
-      await tester.pump(const Duration(milliseconds: 100));
-      expect(find.text('Status: failed'), findsOneWidget);
-    });
-
-    testWidgets('should debounce rapid updates', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: DebouncedTestWidget(),
-        ),
-      );
-
-      ABUS.registerApiHandler((interaction) async {
-        return ABUSResult.success(interactionId: interaction.id);
-      });
-
-      // Execute multiple rapid interactions
-      for (int i = 0; i < 5; i++) {
-        final interaction = ABUS
-            .builder()
-            .withId('debounce_$i')
-            .addData('dummy', true)
-            .addTag('debounced')
-            .build();
-        await ABUS.execute(interaction);
-      }
-
-      // Should only update once after debounce
-      await tester.pump(const Duration(milliseconds: 600)); // Wait for debounce
-      expect(find.text('Update Count: 1'), findsOneWidget);
-    });
-
-    testWidgets('should handle visibility tracking', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: VisibilityTestWidget(),
-        ),
-      );
-
-      final state = tester
-          .state<_VisibilityTestWidgetState>(find.byType(VisibilityTestWidget));
-
-      // Execute interaction while visible
-      final interaction = ABUS
-          .builder()
-          .withId('visibility_test')
-          .addData('dummy', true)
-          .addTag('visibility')
-          .build();
-
-      ABUS.registerApiHandler((interaction) async {
-        return ABUSResult.success(interactionId: interaction.id);
-      });
-
-      await ABUS.execute(interaction);
-      await tester.pump(const Duration(seconds: 31));
-
-      expect(find.text('Updates: 1'), findsOneWidget);
-
-      // Set widget as not visible
-      state.setVisible(false);
-
-      // Execute another interaction
-      final interaction2 = ABUS
-          .builder()
-          .withId('visibility_test_2')
-          .addData('dummy', true)
-          .addTag('visibility')
-          .build();
-
-      await ABUS.execute(interaction2);
-      await tester.pump();
-
-      // Should still show 1 update (not 2) because widget was not visible
-      expect(find.text('Updates: 1'), findsOneWidget);
-    });
-
-    testWidgets('should handle widget lifecycle correctly', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: LifecycleTestWidget(),
-        ),
-      );
-
-      // Execute interaction
-      final interaction = ABUS
-          .builder()
-          .withId('lifecycle_test')
-          .addData('dummy', true)
-          .build();
-
-      ABUS.registerApiHandler((interaction) async {
-        return ABUSResult.success(interactionId: interaction.id);
-      });
-
-      await ABUS.execute(interaction);
-      await tester.pump();
-
-      expect(find.text('State: updated'), findsOneWidget);
-
-      // Remove widget
-      await tester.pumpWidget(Container());
-
-      // Execute another interaction - should not cause errors
-      final interaction2 = ABUS
-          .builder()
-          .withId('lifecycle_test_2')
-          .addData('dummy', true)
-          .build();
-
-      await ABUS.execute(interaction2);
-      await tester.pump();
-
-      // Should complete without errors
-      expect(tester.binding.hasScheduledFrame, isFalse);
-    });
+  Todo({
+    required this.id,
+    required this.title,
+    this.completed = false,
+    required this.createdAt,
   });
-}
 
-class TestWidget extends StatefulWidget {
-  const TestWidget({super.key});
+  Todo copyWith({
+    String? id,
+    String? title,
+    bool? completed,
+    DateTime? createdAt,
+  }) {
+    return Todo(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      completed: completed ?? this.completed,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
 
-  @override
-  _TestWidgetState createState() => _TestWidgetState();
-}
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'title': title,
+        'completed': completed,
+        'createdAt': createdAt.toIso8601String(),
+      };
 
-class _TestWidgetState extends State<TestWidget> with AbusWidgetMixin {
-  int count = 0;
-
-  @override
-  AbusUpdateConfig get abusConfig => const AbusUpdateConfig(
-        tags: {'counter'},
+  factory Todo.fromJson(Map<String, dynamic> json) => Todo(
+        id: json['id'],
+        title: json['title'],
+        completed: json['completed'],
+        createdAt: DateTime.parse(json['createdAt']),
       );
-
-  @override
-  void onAbusResult(ABUSResult result) {
-    if (result.isSuccess) {
-      setState(() {
-        count++;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: Text('Count: $count'),
-      ),
-    );
-  }
 }
 
-class FilteredTestWidget extends StatefulWidget {
-  const FilteredTestWidget({super.key});
+// Custom State Handler using Provider pattern
+// Note: There are different patterns for state management, this is just one example
+// You can also use BLoC, or use the CustomAbusHandler for your own implementation
+class TodoProvider extends ChangeNotifier with AbusProvider {
+  List<Todo> _todos = [];
+  bool _isLoading = false;
+  String? _error;
+
+  List<Todo> get todos => List.unmodifiable(_todos);
+  bool get isLoading => _isLoading;
+  String? get error => _error;
+
+  // Store previous states for rollback
+  final Map<String, List<Todo>> _stateSnapshots = {};
 
   @override
-  _FilteredTestWidgetState createState() => _FilteredTestWidgetState();
-}
-
-class _FilteredTestWidgetState extends State<FilteredTestWidget>
-    with AbusWidgetMixin {
-  int count = 0;
-
-  @override
-  AbusUpdateConfig get abusConfig => AbusUpdateConfig(
-        tags: {'update'},
-        customFilter: (result) {
-          // Filter out results that have should_filter = true in metadata
-          return !(result.data?['should_filter'] == true);
-        },
-      );
-
-  @override
-  void onAbusResult(ABUSResult result) {
-    setState(() {
-      count++;
-    });
+  bool canHandle(InteractionDefinition interaction) {
+    return interaction.tags.contains('todo');
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: Text('Filtered Count: $count'),
-      ),
-    );
-  }
-}
-
-class InteractiveTestWidget extends StatefulWidget {
-  const InteractiveTestWidget({super.key});
-
-  @override
-  _InteractiveTestWidgetState createState() => _InteractiveTestWidgetState();
-}
-
-class _InteractiveTestWidgetState extends State<InteractiveTestWidget>
-    with AbusWidgetMixin {
-  int buttonPresses = 0;
-
-  void _onButtonPress() async {
-    final interaction = interactionBuilder()
-        .withId('button_press')
-        .addData('timestamp', DateTime.now().millisecondsSinceEpoch)
-        .build();
-
-    await executeInteraction(interaction);
+  Map<String, dynamic>? getCurrentState(InteractionDefinition interaction) {
+    return {
+      'todos': _todos.map((t) => t.toJson()).toList(),
+      'isLoading': _isLoading,
+      'error': _error,
+    };
   }
 
-  @override
-  void onAbusResult(ABUSResult result) {
-    if (result.isSuccess && result.interactionId == 'button_press') {
-      setState(() {
-        buttonPresses++;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text('Button Pressed: $buttonPresses'),
-          ElevatedButton(
-            onPressed: _onButtonPress,
-            child: const Text('Press Me'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class OptimisticTestWidget extends StatefulWidget {
-  const OptimisticTestWidget({super.key});
-
-  @override
-  _OptimisticTestWidgetState createState() => _OptimisticTestWidgetState();
-}
-
-class _OptimisticTestWidgetState extends State<OptimisticTestWidget>
-    with AbusWidgetMixin {
-  String status = 'idle';
-
-  void _executeOptimistic() async {
-    setState(() {
-      status = 'processing';
-    });
-
-    final interaction =
-        ABUS.builder().withId('optimistic_test').addData('test', true).build();
-
-    // This will trigger optimistic update, then fail and rollback
-    await executeInteraction(interaction, optimistic: true);
-  }
-
-  @override
-  void onAbusResult(ABUSResult result) {
-    setState(() {
-      if (result.metadata?['rollback'] == true) {
-        status = 'failed';
-      } else if (result.isSuccess) {
-        status = 'success';
-      } else {
-        status = 'error';
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text('Status: $status'),
-          GestureDetector(
-            onTap: _executeOptimistic,
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              color: Colors.blue,
-              child: const Text('Execute Optimistic'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class DebouncedTestWidget extends StatefulWidget {
-  const DebouncedTestWidget({super.key});
-
-  @override
-  _DebouncedTestWidgetState createState() => _DebouncedTestWidgetState();
-}
-
-class _DebouncedTestWidgetState extends State<DebouncedTestWidget>
-    with AbusWidgetMixin {
-  int updateCount = 0;
-
-  @override
-  AbusUpdateConfig get abusConfig => const AbusUpdateConfig(
-        tags: {'debounced'},
-        debounceDelay: Duration(milliseconds: 500),
-      );
-
-  @override
-  void onAbusResult(ABUSResult result) {
-    setState(() {
-      updateCount++;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: Text('Update Count: $updateCount'),
-      ),
-    );
-  }
-}
-
-class VisibilityTestWidget extends StatefulWidget {
-  const VisibilityTestWidget({super.key});
-
-  @override
-  _VisibilityTestWidgetState createState() => _VisibilityTestWidgetState();
-}
-
-class _VisibilityTestWidgetState extends State<VisibilityTestWidget>
-    with AbusWidgetMixin {
-  int updates = 0;
-
-  @override
-  AbusUpdateConfig get abusConfig => const AbusUpdateConfig(
-        tags: {'visibility'},
-        onlyWhenVisible: true,
-      );
-
-  @override
-  void onAbusResult(ABUSResult result) {
-    setState(() {
-      updates++;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: Text('Updates: $updates'),
-      ),
-    );
-  }
-}
-
-class LifecycleTestWidget extends StatefulWidget {
-  const LifecycleTestWidget({super.key});
-
-  @override
-  _LifecycleTestWidgetState createState() => _LifecycleTestWidgetState();
-}
-
-class _LifecycleTestWidgetState extends State<LifecycleTestWidget>
-    with AbusWidgetMixin {
-  String state = 'init';
-
-  @override
-  void initState() {
-    super.initState();
-    state = 'active';
-  }
-
-  @override
-  void onAbusResult(ABUSResult result) {
-    if (mounted) {
-      setState(() {
-        state = 'updated';
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Center(
-        child: Text('State: $state'),
-      ),
-    );
-  }
-}
-
-// Test Handlers
-class WidgetTestHandler extends CustomAbusHandler {
-  @override
-  Future<ABUSResult>? executeAPI(InteractionDefinition interaction) {
-    return Future.value(ABUSResult.success(
-      data: {'processed': true},
-      interactionId: interaction.id,
-    ));
-  }
-}
-
-class RollbackTestHandler extends CustomAbusHandler {
   @override
   Future<void> handleOptimistic(
       String interactionId, InteractionDefinition interaction) async {
-    // Optimistic update handled
+    // Store current state for rollback
+    _stateSnapshots[interactionId] = List.from(_todos);
+
+    final data = interaction.toJson()['data'] as Map<String, dynamic>;
+    final action = data['action'] as String;
+
+    _error = null;
+    _isLoading = true;
+
+    switch (action) {
+      case 'create':
+        final payload = data['payload'] as Map<String, dynamic>;
+        final todo = Todo.fromJson(payload);
+        _todos.add(todo);
+        break;
+
+      case 'update':
+        final todoId = data['resourceId'] as String;
+        final payload = data['payload'] as Map<String, dynamic>;
+        final index = _todos.indexWhere((t) => t.id == todoId);
+        if (index != -1) {
+          _todos[index] = _todos[index].copyWith(
+            title: payload['title'],
+            completed: payload['completed'],
+          );
+        }
+        break;
+
+      case 'delete':
+        final todoId = data['resourceId'] as String;
+        _todos.removeWhere((t) => t.id == todoId);
+        break;
+    }
+
+    notifyListeners();
   }
 
   @override
-  Future<ABUSResult>? executeAPI(InteractionDefinition interaction) {
-    // Simulate API failure
-    return Future.value(ABUSResult.error('API Error'));
+  Future<void> handleCommit(
+      String interactionId, InteractionDefinition interaction) async {
+    _isLoading = false;
+    _stateSnapshots.remove(interactionId);
+    notifyListeners();
   }
 
   @override
   Future<void> handleRollback(
       String interactionId, InteractionDefinition interaction) async {
-    // Rollback handled
+    final previousState = _stateSnapshots[interactionId];
+    if (previousState != null) {
+      _todos = previousState;
+      _isLoading = false;
+      _error = 'Operation failed - changes reverted';
+      _stateSnapshots.remove(interactionId);
+      notifyListeners();
+    }
+  }
+
+  // If not required by the Provider, it can be omitted
+  @override
+  Future<ABUSResult>? executeAPI(InteractionDefinition interaction) {
+    // This provider doesn't handle API calls directly
+    return null;
+  }
+
+  void clearError() {
+    _error = null;
+    notifyListeners();
+  }
+}
+
+// Mock API Service
+class TodoApiService {
+  static final Random _random = Random();
+
+  static Future<ABUSResult> handleTodoInteraction(
+      InteractionDefinition interaction) async {
+    // Simulate network delay
+    await Future.delayed(Duration(milliseconds: 800 + _random.nextInt(400)));
+
+    final data = interaction.toJson()['data'] as Map<String, dynamic>;
+    final action = data['action'] as String;
+
+    // Simulate occasional failures
+    if (_random.nextDouble() < 0.2) {
+      return ABUSResult.error(
+        'Network error: Failed to $action todo',
+        interactionId: interaction.id,
+        metadata: {'action': action},
+      );
+    }
+
+    switch (action) {
+      case 'create':
+        return ABUSResult.success(
+          data: {'message': 'Todo created successfully'},
+          interactionId: interaction.id,
+          metadata: {'action': action},
+        );
+
+      case 'update':
+        return ABUSResult.success(
+          data: {'message': 'Todo updated successfully'},
+          interactionId: interaction.id,
+          metadata: {'action': action},
+        );
+
+      case 'delete':
+        return ABUSResult.success(
+          data: {'message': 'Todo deleted successfully'},
+          interactionId: interaction.id,
+          metadata: {'action': action},
+        );
+
+      default:
+        return ABUSResult.error(
+          'Unknown action: $action',
+          interactionId: interaction.id,
+        );
+    }
+  }
+}
+
+// Main Todo List Page
+class TodoListPage extends StatefulWidget {
+  const TodoListPage({super.key});
+
+  @override
+  TodoListPageState createState() => TodoListPageState();
+}
+
+// Add the AbusWidgetMixin to handle ABUS updates
+class TodoListPageState extends State<TodoListPage> with AbusWidgetMixin {
+  late TodoProvider _todoProvider;
+  final TextEditingController _textController = TextEditingController();
+
+  @override
+  AbusUpdateConfig get abusConfig => const AbusUpdateConfig(
+        tags: {'todo'},
+        rebuildOnSuccess: true,
+        rebuildOnError: true,
+        rebuildOnRollback: true,
+        debounceDelay: Duration(milliseconds: 100),
+      );
+
+  @override
+  void initState() {
+    super.initState();
+    _todoProvider = TodoProvider();
+
+    // Register the provider as a handler
+    ABUS.registerHandler(_todoProvider);
+
+    // Register the API handler
+    ABUS.registerApiHandler(TodoApiService.handleTodoInteraction);
+  }
+
+  @override
+  void dispose() {
+    _textController.dispose();
+    _todoProvider.dispose();
+    super.dispose();
+  }
+
+  @override
+  void onAbusResult(ABUSResult result) {
+    // Handle specific results
+    if (result.isSuccess && result.metadata?['action'] != null) {
+      _showSnackBar(
+        result.data?['message'] ?? 'Operation completed',
+        Colors.green,
+      );
+    } else if (!result.isSuccess && result.error != null) {
+      final isRollback = result.metadata?['rollback'] == true;
+      _showSnackBar(
+        isRollback ? 'Changes reverted due to error' : result.error!,
+        Colors.red,
+      );
+    }
+  }
+
+  void _showSnackBar(String message, Color color) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: color,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _addTodo() async {
+    final title = _textController.text.trim();
+    if (title.isEmpty) return;
+
+    final todo = Todo(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      title: title,
+      createdAt: DateTime.now(),
+    );
+
+    final interaction = InteractionTypes.crud(
+      action: 'create',
+      resourceType: 'todo',
+      payload: todo.toJson(),
+    ).copyWith(tags: {'todo'});
+
+    _textController.clear();
+
+    try {
+      await executeInteraction(interaction);
+    } catch (e) {
+      _showSnackBar('Failed to add todo: $e', Colors.red);
+    }
+  }
+
+  Future<void> _toggleTodo(Todo todo) async {
+    final interaction = InteractionTypes.crud(
+      action: 'update',
+      resourceType: 'todo',
+      resourceId: todo.id,
+      payload: {'completed': !todo.completed, 'title': todo.title},
+    ).copyWith(tags: {'todo'});
+
+    try {
+      await executeInteraction(interaction);
+    } catch (e) {
+      _showSnackBar('Failed to update todo: $e', Colors.red);
+    }
+  }
+
+  Future<void> _deleteTodo(Todo todo) async {
+    final interaction = InteractionTypes.crud(
+      action: 'delete',
+      resourceType: 'todo',
+      resourceId: todo.id,
+    ).copyWith(tags: {'todo'});
+
+    try {
+      await executeInteraction(interaction);
+    } catch (e) {
+      _showSnackBar('Failed to delete todo: $e', Colors.red);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('ABUS Todo Demo'),
+        actions: [
+          if (_todoProvider.isLoading)
+            Container(
+              margin: const EdgeInsets.all(16),
+              width: 20,
+              height: 20,
+              child: const CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ),
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            onPressed: () => _showInfoDialog(),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // Error banner
+          if (_todoProvider.error != null)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              color: Colors.red.shade100,
+              child: Row(
+                children: [
+                  const Icon(Icons.error, color: Colors.red),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _todoProvider.error!,
+                      style: TextStyle(color: Colors.red.shade800),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _todoProvider.clearError,
+                    child: const Text('DISMISS'),
+                  ),
+                ],
+              ),
+            ),
+
+          // Add todo input
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _textController,
+                    decoration: const InputDecoration(
+                      hintText: 'Enter a new todo...',
+                      border: OutlineInputBorder(),
+                    ),
+                    onSubmitted: (_) => _addTodo(),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: _addTodo,
+                  child: const Text('ADD'),
+                ),
+              ],
+            ),
+          ),
+
+          // Todo list
+          Expanded(
+            child: _todoProvider.todos.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.list_alt,
+                            size: 64, color: Colors.grey),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No todos yet',
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                        const Text('Add one above to get started'),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _todoProvider.todos.length,
+                    itemBuilder: (context, index) {
+                      final todo = _todoProvider.todos[index];
+                      return TodoListItem(
+                        todo: todo,
+                        onToggle: () => _toggleTodo(todo),
+                        onDelete: () => _deleteTodo(todo),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showInfoDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('ABUS Demo Features'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildInfoItem('✨ Optimistic Updates', 'Changes appear instantly'),
+            _buildInfoItem(
+                '🔄 Auto Rollback', 'Failed operations revert automatically'),
+            _buildInfoItem(
+                '⚡ Error Simulation', '~20% of operations fail randomly'),
+            _buildInfoItem('📱 Real-time UI', 'Live updates via ABUS streams'),
+            _buildInfoItem(
+                '🎯 Smart Filtering', 'Only relevant updates trigger rebuilds'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('GOT IT'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoItem(String title, String description) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(description,
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+        ],
+      ),
+    );
+  }
+}
+
+// Todo List Item Widget
+class TodoListItem extends StatelessWidget {
+  final Todo todo;
+  final VoidCallback onToggle;
+  final VoidCallback onDelete;
+
+  const TodoListItem({
+    super.key,
+    required this.todo,
+    required this.onToggle,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: ListTile(
+        leading: Checkbox(
+          value: todo.completed,
+          onChanged: (_) => onToggle(),
+        ),
+        title: Text(
+          todo.title,
+          style: TextStyle(
+            decoration: todo.completed ? TextDecoration.lineThrough : null,
+            color: todo.completed ? Colors.grey : null,
+          ),
+        ),
+        subtitle: Text(
+          'Created: ${_formatDate(todo.createdAt)}',
+          style: const TextStyle(fontSize: 12),
+        ),
+        trailing: IconButton(
+          icon: const Icon(Icons.delete, color: Colors.red),
+          onPressed: () => _showDeleteConfirmation(context),
+        ),
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
+  }
+
+  void _showDeleteConfirmation(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Todo'),
+        content: Text('Are you sure you want to delete "${todo.title}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('CANCEL'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              onDelete();
+            },
+            child: const Text('DELETE', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Extension for copyWith on InteractionDefinition
+extension InteractionDefinitionExtension on InteractionDefinition {
+  GenericInteraction copyWith({
+    String? id,
+    Map<String, dynamic>? data,
+    InteractionDefinition? rollback,
+    Duration? timeout,
+    bool? supportsOptimistic,
+    int? priority,
+    Set<String>? tags,
+  }) {
+    if (this is GenericInteraction) {
+      final generic = this as GenericInteraction;
+      return GenericInteraction(
+        id: id ?? generic.id,
+        data: data ?? generic.toJson()['data'],
+        rollback: rollback ?? generic.createRollback(),
+        timeout: timeout ?? generic.timeout,
+        supportsOptimistic: supportsOptimistic ?? generic.supportsOptimistic,
+        priority: priority ?? generic.priority,
+        tags: tags ?? generic.tags,
+      );
+    }
+
+    // Fallback for other implementations
+    return GenericInteraction(
+      id: id ?? this.id,
+      data: data ?? toJson(),
+      rollback: rollback ?? createRollback(),
+      timeout: timeout ?? this.timeout,
+      supportsOptimistic: supportsOptimistic ?? this.supportsOptimistic,
+      priority: priority ?? this.priority,
+      tags: tags ?? this.tags,
+    );
   }
 }

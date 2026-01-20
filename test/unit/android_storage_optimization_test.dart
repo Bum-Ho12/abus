@@ -17,7 +17,7 @@ void main() {
         tempDir.createSync(recursive: true);
       }
       // Disable auto-sync for precise testing
-      storage = AndroidSharedStorage(tempDir, syncInterval: Duration(hours: 1));
+      storage = AndroidSharedStorage(tempDir, syncInterval: const Duration(hours: 1));
     });
 
     tearDown(() {
@@ -42,13 +42,13 @@ void main() {
 
       // First sync - should detect file
       await storage.sync();
-      await Future.delayed(Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 50));
       expect(events.length, 1);
       expect(events.last, data1);
 
       // Second sync - currently no change in file, should NOT notify
       await storage.sync();
-      await Future.delayed(Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 50));
       expect(events.length, 1,
           reason: 'Should not emit event if content is identical');
 
@@ -57,7 +57,7 @@ void main() {
 
       // Third sync - content changed, SHOULD notify
       await storage.sync();
-      await Future.delayed(Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 50));
       expect(events.length, 2);
       expect(events.last, data2);
 
@@ -75,7 +75,7 @@ void main() {
 
       // Save via storage API
       await storage.save(key, data);
-      await Future.delayed(Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 50));
 
       // Should have emitted one event from the save itself (inherited from FileStorage)
       expect(events.length, 1);
@@ -83,7 +83,7 @@ void main() {
 
       // Sync - should NOT emit again because we just saved it and updated cache
       await storage.sync();
-      await Future.delayed(Duration(milliseconds: 50));
+      await Future.delayed(const Duration(milliseconds: 50));
       expect(events.length, 1,
           reason: 'Save should update cache to avoid re-reading own write');
 

@@ -1,5 +1,6 @@
 // main.dart
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:abus/abus.dart';
 import 'dart:async';
 import 'dart:math';
@@ -14,12 +15,15 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'ABUS Demo',
+      title: 'ABUS BLoC Demo',
       theme: ThemeData(
         primarySwatch: Colors.blue,
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
-      home: const TodoListPage(),
+      home: BlocProvider(
+        create: (context) => TodoBloc(),
+        child: const TodoListPage(),
+      ),
     );
   }
 }
@@ -65,24 +69,207 @@ class Todo {
         completed: json['completed'],
         createdAt: DateTime.parse(json['createdAt']),
       );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is Todo && runtimeType == other.runtimeType && id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
 }
 
-// Custom State Handler using CustomAbusHandler
-class TodoStateHandler extends CustomAbusHandler {
-  List<Todo> _todos = [];
-  bool _isLoading = false;
-  String? _error;
+// BLoC Events
+abstract class TodoEvent {}
 
-  // Callback for notifying UI of state changes
-  void Function()? onStateChanged;
+class LoadTodos extends TodoEvent {}
 
-  List<Todo> get todos => List.unmodifiable(_todos);
-  bool get isLoading => _isLoading;
-  String? get error => _error;
+class AddTodo extends TodoEvent {
+  final Todo todo;
+  AddTodo(this.todo);
+}
 
-  // Store previous states for rollback
-  final Map<String, Map<String, dynamic>> _stateSnapshots = {};
+class UpdateTodo extends TodoEvent {
+  final Todo todo;
+  UpdateTodo(this.todo);
+}
 
+class DeleteTodo extends TodoEvent {
+  final String todoId;
+  DeleteTodo(this.todoId);
+}
+
+class ClearError extends TodoEvent {}
+
+// Internal events for ABUS integration
+class _OptimisticAdd extends TodoEvent {
+  final Todo todo;
+  _OptimisticAdd(this.todo);
+}
+
+class _OptimisticUpdate extends TodoEvent {
+  final Todo todo;
+  _OptimisticUpdate(this.todo);
+}
+
+class _OptimisticDelete extends TodoEvent {
+  final String todoId;
+  _OptimisticDelete(this.todoId);
+}
+
+class _CommitChanges extends TodoEvent {}
+
+class _RollbackChanges extends TodoEvent {
+  final List<Todo> previousTodos;
+  final String error;
+  _RollbackChanges(this.previousTodos, this.error);
+}
+
+class _SetLoading extends TodoEvent {
+  final bool isLoading;
+  _SetLoading(this.isLoading);
+}
+
+class _SetError extends TodoEvent {
+  final String? error;
+  _SetError(this.error);
+}
+
+// BLoC State
+class TodoState {
+  final List<Todo> todos;
+  final bool isLoading;
+  final String? error;
+
+  const TodoState({
+    this.todos = const [],
+    this.isLoading = false,
+    this.error,
+  });
+
+  TodoState copyWith({
+    List<Todo>? todos,
+    bool? isLoading,
+    String? error,
+  }) {
+    return TodoState(
+      todos: todos ?? this.todos,
+      isLoading: isLoading ?? this.isLoading,
+      error: error,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TodoState &&
+          runtimeType == other.runtimeType &&
+          todos.length == other.todos.length &&
+          todos.every((todo) => other.todos.contains(todo)) &&
+          isLoading == other.isLoading &&
+          error == other.error;
+
+  @override
+  int get hashCode => todos.hashCode ^ isLoading.hashCode ^ error.hashCode;
+}
+
+// BLoC with ABUS integration
+class TodoBloc extends Bloc<TodoEvent, TodoState> with AbusBloc<TodoState> {
+  // Store snapshots for rollback
+  final Map<String, List<Todo>> _stateSnapshots = {};
+
+  TodoBloc() : super(const TodoState()) {
+    // Register standard event handlers
+    on<LoadTodos>(_onLoadTodos);
+    on<AddTodo>(_onAddTodo);
+    on<UpdateTodo>(_onUpdateTodo);
+    on<DeleteTodo>(_onDeleteTodo);
+    on<ClearError>(_onClearError);
+
+    // Register ABUS internal event handlers
+    on<_OptimisticAdd>(_onOptimisticAdd);
+    on<_OptimisticUpdate>(_onOptimisticUpdate);
+    on<_OptimisticDelete>(_onOptimisticDelete);
+    on<_CommitChanges>(_onCommitChanges);
+    on<_RollbackChanges>(_onRollbackChanges);
+    on<_SetLoading>(_onSetLoading);
+    on<_SetError>(_onSetError);
+  }
+
+  // Standard BLoC event handlers
+  void _onLoadTodos(LoadTodos event, Emitter<TodoState> emit) {
+    // Initialize with some sample data
+    final sampleTodos = [
+      Todo(
+        id: '1',
+        title: 'Welcome to ABUS BLoC Demo',
+        createdAt: DateTime.now().subtract(const Duration(hours: 2)),
+      ),
+      Todo(
+        id: '2',
+        title: 'Try adding a new todo',
+        createdAt: DateTime.now().subtract(const Duration(hours: 1)),
+      ),
+    ];
+    emit(state.copyWith(todos: sampleTodos));
+  }
+
+  void _onAddTodo(AddTodo event, Emitter<TodoState> emit) {
+    // This will be handled by ABUS optimistic updates
+  }
+
+  void _onUpdateTodo(UpdateTodo event, Emitter<TodoState> emit) {
+    // This will be handled by ABUS optimistic updates
+  }
+
+  void _onDeleteTodo(DeleteTodo event, Emitter<TodoState> emit) {
+    // This will be handled by ABUS optimistic updates
+  }
+
+  void _onClearError(ClearError event, Emitter<TodoState> emit) {
+    emit(state.copyWith(error: null));
+  }
+
+  // ABUS internal event handlers
+  void _onOptimisticAdd(_OptimisticAdd event, Emitter<TodoState> emit) {
+    final updatedTodos = List<Todo>.from(state.todos)..add(event.todo);
+    emit(state.copyWith(todos: updatedTodos, isLoading: true, error: null));
+  }
+
+  void _onOptimisticUpdate(_OptimisticUpdate event, Emitter<TodoState> emit) {
+    final updatedTodos = state.todos.map((todo) {
+      return todo.id == event.todo.id ? event.todo : todo;
+    }).toList();
+    emit(state.copyWith(todos: updatedTodos, isLoading: true, error: null));
+  }
+
+  void _onOptimisticDelete(_OptimisticDelete event, Emitter<TodoState> emit) {
+    final updatedTodos =
+        state.todos.where((todo) => todo.id != event.todoId).toList();
+    emit(state.copyWith(todos: updatedTodos, isLoading: true, error: null));
+  }
+
+  void _onCommitChanges(_CommitChanges event, Emitter<TodoState> emit) {
+    emit(state.copyWith(isLoading: false));
+  }
+
+  void _onRollbackChanges(_RollbackChanges event, Emitter<TodoState> emit) {
+    emit(state.copyWith(
+      todos: event.previousTodos,
+      isLoading: false,
+      error: event.error,
+    ));
+  }
+
+  void _onSetLoading(_SetLoading event, Emitter<TodoState> emit) {
+    emit(state.copyWith(isLoading: event.isLoading));
+  }
+
+  void _onSetError(_SetError event, Emitter<TodoState> emit) {
+    emit(state.copyWith(error: event.error));
+  }
+
+  // ABUS Handler Implementation
   @override
   bool canHandle(InteractionDefinition interaction) {
     return interaction.tags.contains('todo');
@@ -91,9 +278,9 @@ class TodoStateHandler extends CustomAbusHandler {
   @override
   Map<String, dynamic>? getCurrentState(InteractionDefinition interaction) {
     return {
-      'todos': _todos.map((t) => t.toJson()).toList(),
-      'isLoading': _isLoading,
-      'error': _error,
+      'todos': state.todos.map((t) => t.toJson()).toList(),
+      'isLoading': state.isLoading,
+      'error': state.error,
     };
   }
 
@@ -101,91 +288,68 @@ class TodoStateHandler extends CustomAbusHandler {
   Future<void> handleOptimistic(
       String interactionId, InteractionDefinition interaction) async {
     // Store current state for rollback
-    _stateSnapshots[interactionId] = {
-      'todos': _todos.map((t) => t.toJson()).toList(),
-      'isLoading': _isLoading,
-      'error': _error,
-    };
+    _stateSnapshots[interactionId] = List.from(state.todos);
 
     final data = interaction.toJson()['data'] as Map<String, dynamic>;
     final action = data['action'] as String;
 
-    _error = null;
-    _isLoading = true;
+    add(_SetError(null));
+    add(_SetLoading(true));
 
     switch (action) {
       case 'create':
         final payload = data['payload'] as Map<String, dynamic>;
         final todo = Todo.fromJson(payload);
-        _todos.add(todo);
+        add(_OptimisticAdd(todo));
         break;
 
       case 'update':
         final todoId = data['resourceId'] as String;
         final payload = data['payload'] as Map<String, dynamic>;
-        final index = _todos.indexWhere((t) => t.id == todoId);
-        if (index != -1) {
-          _todos[index] = _todos[index].copyWith(
-            title: payload['title'],
-            completed: payload['completed'],
-          );
-        }
+        final existingTodo = state.todos.firstWhere((t) => t.id == todoId);
+        final updatedTodo = existingTodo.copyWith(
+          title: payload['title'],
+          completed: payload['completed'],
+        );
+        add(_OptimisticUpdate(updatedTodo));
         break;
 
       case 'delete':
         final todoId = data['resourceId'] as String;
-        _todos.removeWhere((t) => t.id == todoId);
+        add(_OptimisticDelete(todoId));
         break;
     }
-
-    _notifyStateChanged();
   }
 
   @override
   Future<void> handleCommit(
       String interactionId, InteractionDefinition interaction) async {
-    _isLoading = false;
+    add(_CommitChanges());
     _stateSnapshots.remove(interactionId);
-    _notifyStateChanged();
   }
 
   @override
   Future<void> handleRollback(
       String interactionId, InteractionDefinition interaction) async {
-    final previousState = _stateSnapshots[interactionId];
-    if (previousState != null) {
-      // Restore previous state
-      final todosList = previousState['todos'] as List<dynamic>;
-      _todos = todosList
-          .map((json) => Todo.fromJson(json as Map<String, dynamic>))
-          .toList();
-      _isLoading = previousState['isLoading'] as bool;
-      _error = 'Operation failed - changes reverted';
+    final previousTodos = _stateSnapshots[interactionId];
+    if (previousTodos != null) {
+      add(_RollbackChanges(
+          previousTodos, 'Operation failed - changes reverted'));
       _stateSnapshots.remove(interactionId);
-      _notifyStateChanged();
     }
   }
 
-  // If not required, it can be omitted
+  // If not required by the Bloc, it can be omitted
   @override
   Future<ABUSResult>? executeAPI(InteractionDefinition interaction) {
-    // This handler doesn't handle API calls directly - we use the global handler
+    // This BLoC doesn't handle API calls directly - they're handled by the service
     return null;
   }
 
-  void clearError() {
-    _error = null;
-    _notifyStateChanged();
-  }
-
-  void _notifyStateChanged() {
-    onStateChanged?.call();
-  }
-
-  // Clean up method
-  void dispose() {
+  @override
+  Future<void> close() {
     _stateSnapshots.clear();
-    onStateChanged = null;
+    return super.close();
   }
 }
 
@@ -202,7 +366,7 @@ class TodoApiService {
     final action = data['action'] as String;
 
     // Simulate occasional failures
-    if (_random.nextDouble() < 0.2) {
+    if (_random.nextDouble() < 0.25) {
       return ABUSResult.error(
         'Network error: Failed to $action todo',
         interactionId: interaction.id,
@@ -246,11 +410,10 @@ class TodoListPage extends StatefulWidget {
   const TodoListPage({super.key});
 
   @override
-  _TodoListPageState createState() => _TodoListPageState();
+  TodoListPageState createState() => TodoListPageState();
 }
 
-class _TodoListPageState extends State<TodoListPage> with AbusWidgetMixin {
-  late TodoStateHandler _todoHandler;
+class TodoListPageState extends State<TodoListPage> with AbusWidgetMixin {
   final TextEditingController _textController = TextEditingController();
 
   @override
@@ -265,26 +428,20 @@ class _TodoListPageState extends State<TodoListPage> with AbusWidgetMixin {
   @override
   void initState() {
     super.initState();
-    _todoHandler = TodoStateHandler();
 
-    // Set up state change callback to trigger UI rebuilds
-    _todoHandler.onStateChanged = () {
-      if (mounted) {
-        setState(() {});
-      }
-    };
-
-    // Register the handler
-    ABUS.registerHandler(_todoHandler);
+    // Register the BLoC as a handler
+    ABUS.registerHandler(context.read<TodoBloc>());
 
     // Register the API handler
     ABUS.registerApiHandler(TodoApiService.handleTodoInteraction);
+
+    // Load initial todos
+    context.read<TodoBloc>().add(LoadTodos());
   }
 
   @override
   void dispose() {
     _textController.dispose();
-    _todoHandler.dispose();
     super.dispose();
   }
 
@@ -373,108 +530,133 @@ class _TodoListPageState extends State<TodoListPage> with AbusWidgetMixin {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('ABUS Todo Demo'),
-        actions: [
-          if (_todoHandler.isLoading)
-            Container(
-              margin: const EdgeInsets.all(16),
-              width: 20,
-              height: 20,
-              child: const CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
-            ),
-          IconButton(
-            icon: const Icon(Icons.info_outline),
-            onPressed: () => _showInfoDialog(),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Error banner
-          if (_todoHandler.error != null)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              color: Colors.red.shade100,
-              child: Row(
-                children: [
-                  const Icon(Icons.error, color: Colors.red),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _todoHandler.error!,
-                      style: TextStyle(color: Colors.red.shade800),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: _todoHandler.clearError,
-                    child: const Text('DISMISS'),
-                  ),
-                ],
-              ),
-            ),
-
-          // Add todo input
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _textController,
-                    decoration: const InputDecoration(
-                      hintText: 'Enter a new todo...',
-                      border: OutlineInputBorder(),
-                    ),
-                    onSubmitted: (_) => _addTodo(),
+    return BlocBuilder<TodoBloc, TodoState>(
+      builder: (context, state) {
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('ABUS BLoC Demo'),
+            actions: [
+              if (state.isLoading)
+                Container(
+                  margin: const EdgeInsets.all(16),
+                  width: 20,
+                  height: 20,
+                  child: const CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                   ),
                 ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: _addTodo,
-                  child: const Text('ADD'),
-                ),
-              ],
-            ),
+              IconButton(
+                icon: const Icon(Icons.info_outline),
+                onPressed: () => _showInfoDialog(),
+              ),
+            ],
           ),
-
-          // Todo list
-          Expanded(
-            child: _todoHandler.todos.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.list_alt,
-                            size: 64, color: Colors.grey),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No todos yet',
-                          style: Theme.of(context).textTheme.headlineSmall,
+          body: Column(
+            children: [
+              // Error banner
+              if (state.error != null)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  color: Colors.red.shade100,
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error, color: Colors.red),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          state.error!,
+                          style: TextStyle(color: Colors.red.shade800),
                         ),
-                        const Text('Add one above to get started'),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    itemCount: _todoHandler.todos.length,
-                    itemBuilder: (context, index) {
-                      final todo = _todoHandler.todos[index];
-                      return TodoListItem(
-                        todo: todo,
-                        onToggle: () => _toggleTodo(todo),
-                        onDelete: () => _deleteTodo(todo),
-                      );
-                    },
+                      ),
+                      TextButton(
+                        onPressed: () =>
+                            context.read<TodoBloc>().add(ClearError()),
+                        child: const Text('DISMISS'),
+                      ),
+                    ],
                   ),
+                ),
+
+              // Add todo input
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _textController,
+                        decoration: const InputDecoration(
+                          hintText: 'Enter a new todo...',
+                          border: OutlineInputBorder(),
+                        ),
+                        onSubmitted: (_) => _addTodo(),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: _addTodo,
+                      child: const Text('ADD'),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Pending interactions info
+              if (ABUS.manager.pendingCount > 0)
+                Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  color: Colors.blue.shade50,
+                  child: Row(
+                    children: [
+                      const Icon(Icons.sync, color: Colors.blue, size: 16),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${ABUS.manager.pendingCount} operation(s) in progress...',
+                        style: TextStyle(
+                            color: Colors.blue.shade700, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // Todo list
+              Expanded(
+                child: state.todos.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.list_alt,
+                                size: 64, color: Colors.grey),
+                            const SizedBox(height: 16),
+                            Text(
+                              'No todos yet',
+                              style: Theme.of(context).textTheme.headlineSmall,
+                            ),
+                            const Text('Add one above to get started'),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: state.todos.length,
+                        itemBuilder: (context, index) {
+                          final todo = state.todos[index];
+                          return TodoListItem(
+                            todo: todo,
+                            onToggle: () => _toggleTodo(todo),
+                            onDelete: () => _deleteTodo(todo),
+                          );
+                        },
+                      ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -482,22 +664,21 @@ class _TodoListPageState extends State<TodoListPage> with AbusWidgetMixin {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('ABUS Demo Features'),
+        title: const Text('ABUS BLoC Demo Features'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _buildInfoItem(
+                '🧱 BLoC Integration', 'Full BLoC pattern with ABUS'),
             _buildInfoItem('✨ Optimistic Updates', 'Changes appear instantly'),
             _buildInfoItem(
                 '🔄 Auto Rollback', 'Failed operations revert automatically'),
             _buildInfoItem(
-                '⚡ Error Simulation', '~20% of operations fail randomly'),
-            _buildInfoItem(
-                '📱 Real-time UI', 'Live updates via custom state handler'),
+                '⚡ Error Simulation', '~25% of operations fail randomly'),
+            _buildInfoItem('📱 BlocBuilder UI', 'Reactive UI updates via BLoC'),
             _buildInfoItem(
                 '🎯 Smart Filtering', 'Only relevant updates trigger rebuilds'),
-            _buildInfoItem(
-                '🛠️ CustomAbusHandler', 'No ChangeNotifier dependency'),
           ],
         ),
         actions: [
