@@ -70,7 +70,7 @@ void main() {
       });
 
       // Wait for stream to emit
-      await Future.delayed(Duration(milliseconds: 100));
+      await Future.delayed(const Duration(milliseconds: 100));
 
       expect(
           FeedbackBus.queue.any((e) => e.message == 'App 2 Message'), isTrue);

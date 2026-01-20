@@ -11,7 +11,8 @@ A unified Flutter package for handling asynchronous operations with built-in opt
 - 🚀 **Optimistic Updates** - Instant UI responses with automatic rollback on failure
 - 🔄 **Universal Integration** - Works with BLoC, Provider, setState, or any state management
 - 🛡️ **Race Condition Prevention** - Intelligent operation queuing
-- 📱 **Widget Reactive Updates** - Automatic UI updates based on operation results
+- � **Smart Storage** - Optimized cross-app communication with file locking and change detection
+- �📱 **Widget Reactive Updates** - Automatic UI updates based on operation results
 - 🎯 **Type-Safe Operations** - Define operations once, use everywhere
 - 🔧 **Zero Boilerplate** - Minimal setup, maximum functionality
 - 📊 **Built-in Analytics** - Operation tracking and error monitoring
@@ -22,7 +23,7 @@ A unified Flutter package for handling asynchronous operations with built-in opt
 
 ```yaml
 dependencies:
-  abus: ^0.0.4
+  abus: ^0.0.6
 ```
 
 ### Basic Usage
@@ -144,11 +145,11 @@ class UserProvider extends ChangeNotifier with AbusProvider {
 
 ### 💬 Feedback System
 
-ABUS includes a built-in feedback system for displaying toasts, banners, and snackbars that persists across app restarts if configured.
+ABUS includes a built-in feedback system for displaying toasts, banners, and snackbars that persists across app restarts if configured. [Read full documentation](DOCs.md#feedback-system)
 
 ### System Flow
 
-![ABUS APP To APP Flow](doc/app_to_app.svg)
+![ABUS Feedback Flow](doc/app_feedback_flow.svg)
 
 ```dart
 // Show a snackbar
@@ -172,7 +173,14 @@ await FeedbackBus.showBanner(
 
 ### 💾 Storage & Cross-App Communication
 
-ABUS supports swappable storage backends, including `AndroidSharedStorage` for communicating between apps signed by the same developer.
+ABUS supports swappable storage backends, including `AndroidSharedStorage` for communicating between apps signed by the same developer. [Read full documentation](DOCs.md#storage--cross-app-communication)
+
+![ABUS APP To APP Flow](doc/cross_app_flow.png)
+
+
+**Features:**
+- **Smart Sync**: Detects changes to minimize redundant updates.
+- **File Locking**: Prevents race conditions during cross-app writes.
 
 ```dart
 void main() async {
@@ -182,12 +190,12 @@ void main() async {
     storageDir,
     syncInterval: Duration(seconds: 5),
   );
-  
+
   ABUS.setStorage(storage);
-  
+
   // Initialize feedback system with storage
   await FeedbackBus.initialize(storage: storage);
-  
+
   runApp(MyApp());
 }
 ```

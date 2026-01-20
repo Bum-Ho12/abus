@@ -248,7 +248,7 @@ await ABUS.execute(interaction);
 class ABUSResult {
   final bool isSuccess;
   final Map<String, dynamic>? data;
-  final Object? payload;               // NEW: Typed payload support
+  final Object? payload;               // Typed payload support
   final String? error;
   final DateTime timestamp;
   final String? interactionId;
@@ -795,15 +795,26 @@ if (user != null) {
 
 ## Feedback System
 
-ABUS provides a built-in feedback system for displaying user notifications like snackbars, banners, and toasts. This system is integrated with the interaction queue and can persist feedback across app restarts if configured.
+ABUS provides a comprehensive feedback system for managing user notifications. It supports ranking, queuing, and persistence, ensuring that important messages are seen even across app restarts.
 
+### System Flow
 
-### FeedbackBus
+```mermaid
+graph LR
+    App[Your App] -->|1. Request| FB[FeedbackBus]
+    FB -->|2. Process| ABUS[ABUS System]
+    ABUS -->|3. Display| UI[User Interface]
+    ABUS -.->|4. Persist| Storage[Storage]
+```
 
-The `FeedbackBus` is the main entry point for showing feedback.
+### FeedbackBus API
+
+The `FeedbackBus` is the central controller for all feedback events.
+
+#### Showing Feedback
 
 ```dart
-// Show a snackbar
+// Show a snackbar (Standard notifications)
 await FeedbackBus.showSnackbar(
   message: 'Settings saved',
   type: SnackbarType.success,
@@ -812,9 +823,11 @@ await FeedbackBus.showSnackbar(
   onAction: () async {
     // Handle undo
   },
+  tags: {'settings', 'user'}, // For categorization
+  priority: 0,
 );
 
-// Show a persistent banner
+// Show a banner (Persistent, high visibility)
 await FeedbackBus.showBanner(
   message: 'No internet connection',
   type: BannerType.error,
@@ -824,70 +837,77 @@ await FeedbackBus.showBanner(
         onPressed: () => retryConnection(),
       ),
   ],
+  priority: 10, // Higher priority displays on top
 );
 
-// Show a toast
+// Show a toast (Transient, floating)
 await FeedbackBus.showToast(
   message: 'Draft saved',
   type: ToastType.info,
 );
 ```
 
-### Feedback Types
+#### Managing Feedback
 
-- **Snackbar**: Transient messages at the bottom of the screen, optionally with an action.
-- **Banner**: Persistent messages at the top of the content area, creating a dedicated space.
-- **Toast**: Brief, non-intrusive messages that effectively "float" over the UI.
-
-### Persistence
-
-When `ABUS.setStorage()` is configured, feedback events can be persisted. This means if a user closes the app while a banner is displayed, it will reappear when they reopen the app (unless it was dismissed or expired).
+You can programmatically dismiss feedback using IDs or tags.
 
 ```dart
-// Initialize with storage for persistence
-await FeedbackBus.initialize(storage: MyStorageImpl());
+// Dismiss specific event
+await FeedbackBus.dismiss('banner_123');
+
+// Dismiss all feedback related to 'network'
+await FeedbackBus.dismissByTags({'network'});
+
+// clear everything
+await FeedbackBus.dismissAll();
 ```
+
+### Feedback Configuration
+
+| Feature | Description |
+|---------|-------------|
+| **Priority** | Integer value. Higher priority events are displayed first. Banners typically have higher priority than snackbars. |
+| **Tags** | Set of strings used for categorization and bulk management (e.g., dismissing all 'network' errors). |
+| **Duration** | How long the feedback persists. `null` duration usually means "until dismissed" (common for banners). |
+| **Persistence** | If a storage backend is configured, valid feedback events persist across app restarts. |
+
+---
 
 ## Storage & Cross-App Communication
 
-ABUS is designed to work in multi-app ecosystems where different Flutter apps need to share data or coordinate actions.
-
-### AbusStorage Interface
-
-The `AbusStorage` interface allows you to implement custom persistence strategies.
-
-```dart
-abstract class AbusStorage {
-  Future<void> save(String key, Map<String, dynamic> data);
-  Future<Map<String, dynamic>?> read(String key);
-  Future<void> delete(String key);
-  Future<void> clear();
-  Stream<Map<String, dynamic>> get updates; // Listen for external changes
-}
-```
+ABUS is architected to support complex multi-app ecosystems. Using the `AndroidSharedStorage` backend, different apps (signed by the same certificate) can share state, synchronize interactions, and broadcast feedback events.
 
 ### AndroidSharedStorage
 
-Specific implementation for Android that uses a shared directory (e.g., external storage) to allow communication between apps signed by the same certificate or with shared storage permissions.
+This implementation uses a shared directory on the Android filesystem to exchange data. It employs file locking and content hashing to ensure data integrity and performance.
 
 ```dart
-// 1. Setup shared storage
+// Configure storage in main()
+final storageDir = Directory('/sdcard/Android/data/com.example/files');
 final storage = AndroidSharedStorage(
-  Directory('/sdcard/Android/data/com.mycompany.shared/files'),
-  syncInterval: Duration(seconds: 5), // Check for updates every 5s
+  storageDir,
+  syncInterval: Duration(seconds: 10), // Polling interval for changes
 );
 
 ABUS.setStorage(storage);
-
-// 2. Apps can now share data and trigger interactions in each other
-// (assuming they both watch the same storage directory)
+await FeedbackBus.initialize(storage: storage);
 ```
 
-This effectively allows one app to "post" an interaction or feedback event that another app picks up and handles, enabling workflows like:
-- App A triggers a "Sync" operation.
-- App B (background service) sees the request, performs the sync.
-- App B writes a "Sync Complete" feedback event.
-- App A sees the feedback event and shows a Snackbar to the user.
+### Key Capabilities
+
+1.  **File Locking**: Uses `RandomAccessFile` with exclusive locking. This prevents two apps from writing to the same file simultaneously, avoiding data corruption in high-concurrency scenarios.
+2.  **Smart Sync**: The storage system maintains a hash of the file content. It only triggers updates when the actual content changes, minimizing unnecessary parsing and UI rebuilds.
+3.  **Automatic Polling**: The `syncInterval` determines how often the app checks for external changes.
+4.  **Manual Sync**: You can force a sync operation using `FeedbackBus.sync()` or `storage.sync()` if you know an external change has occurred (e.g., via a platform channel event).
+
+### Cross-App Workflow Example
+
+1.  **App A** (Foreground) and **App B** (Background Service) share the same `storageDir`.
+2.  **App B** completes a background sync and writes a `SnackbarEvent` to storage.
+3.  **App A**'s `AndroidSharedStorage` detects the new file during its poll cycle.
+4.  **App A** emits the event, and the user sees "Sync Completed" in the foreground app.
+
+![Cross-App Flow](doc/cross_app_flow.png)
 
 ## Conclusion
 
