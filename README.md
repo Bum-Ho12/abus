@@ -175,7 +175,7 @@ await FeedbackBus.showBanner(
 
 ABUS supports swappable storage backends, including `AndroidSharedStorage` for communicating between apps signed by the same developer. [Read full documentation](DOCs.md#storage--cross-app-communication)
 
-![ABUS APP To APP Flow](doc/app_feedback_flow.svg)
+![ABUS APP To APP Flow](doc/cross_app_flow.png)
 
 
 **Features:**
@@ -190,12 +190,12 @@ void main() async {
     storageDir,
     syncInterval: Duration(seconds: 5),
   );
-  
+
   ABUS.setStorage(storage);
-  
+
   // Initialize feedback system with storage
   await FeedbackBus.initialize(storage: storage);
-  
+
   runApp(MyApp());
 }
 ```

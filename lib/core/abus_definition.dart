@@ -532,6 +532,15 @@ class InteractionBuilder<T> {
 ///
 /// Provides convenience methods for creating standard CRUD operations
 /// and other common interaction patterns.
+///
+/// Types available:
+/// - [create]
+/// - [update]
+/// - [delete]
+/// - [fetch]
+/// - [sync]
+/// - [upload]
+/// - [download]
 class InteractionTypes {
   /// Private constructor to prevent instantiation.
   InteractionTypes._();
