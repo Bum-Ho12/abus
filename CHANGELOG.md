@@ -1,3 +1,8 @@
+## 0.0.7
+- **Documentation Overhaul**: Restructured README to feature Feedback System and Cross-App Communication as core components.
+- **New Guides**: Added detailed "Consuming Feedback" guide with UI examples and "Storage Deep Dive" in DOCs.md.
+- **Improved Examples**: Updated Quick Start to show unified initialization of Storage and Feedback.
+
 ## 0.0.6
 - Updated README documentation to reflect recent changes and version bump.
 

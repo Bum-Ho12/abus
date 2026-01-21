@@ -795,7 +795,7 @@ if (user != null) {
 
 ## Feedback System
 
-ABUS provides a comprehensive feedback system for managing user notifications. It supports ranking, queuing, and persistence, ensuring that important messages are seen even across app restarts.
+ABUS provides a comprehensive feedback system for managing user notifications. It supports ranking, queuing, and persistence, ensuring that important messages are seen even across app restarts. This system is not just an add-on but a core component designed to work seamlessly with asynchronous operations and optimistic updates.
 
 ### System Flow
 
@@ -862,6 +862,91 @@ await FeedbackBus.dismissByTags({'network'});
 await FeedbackBus.dismissAll();
 ```
 
+### Consuming Feedback in UI
+
+To display the feedback events in your Flutter application, use the `FeedbackWidgetMixin`. This mixin automatically listens to queue changes and provides the current list of events.
+
+#### Implementation Example
+
+Here is a complete example of how to build a unified feedback layer that handles Banners, Toasts, and Snackbars.
+
+```dart
+class FeedbackLayer extends StatefulWidget {
+  final Widget child;
+  
+  const FeedbackLayer({super.key, required this.child});
+
+  @override
+  State<FeedbackLayer> createState() => _FeedbackLayerState();
+}
+
+class _FeedbackLayerState extends State<FeedbackLayer> with AbusWidgetMixin, FeedbackWidgetMixin {
+  
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        // 1. Main App Content with Banner Column
+        Column(
+          children: [
+             // Persistent Banners at the top
+            ...bannerEvents.map((event) => MaterialBanner(
+              content: Text(event.message),
+              actions: event.actions.map((action) => TextButton(
+                onPressed: action.onPressed,
+                child: Text(action.label),
+              )).toList(),
+            )),
+            Expanded(child: widget.child),
+          ],
+        ),
+        
+        // 2. Toasts (Overlay)
+        if (toastEvents.isNotEmpty)
+          Positioned(
+            bottom: 50,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Card(
+                color: Colors.black87,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Text(
+                    toastEvents.last.message,
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          
+        // 3. Snackbars are usually handled by ScaffoldMessenger, 
+        // but you can react to them here if needed:
+      ],
+    );
+  }
+
+  @override
+  void onFeedbackQueueChanged(List<FeedbackEvent> queue) {
+    // Handle transient events like Snackbars that shouldn't be rendered directly in build
+    final newSnackbars = snackbarEvents.where((e) => !isShown(e.id));
+    
+    for (var event in newSnackbars) {
+       ScaffoldMessenger.of(context).showSnackBar(
+         SnackBar(
+           content: Text(event.message),
+           action: event.actionLabel != null 
+             ? SnackBarAction(label: event.actionLabel!, onPressed: event.onAction!) 
+             : null,
+         ),
+       );
+       markAsShown(event.id); // Custom tracking implementation
+    }
+  }
+}
+```
+
 ### Feedback Configuration
 
 | Feature | Description |
@@ -870,6 +955,7 @@ await FeedbackBus.dismissAll();
 | **Tags** | Set of strings used for categorization and bulk management (e.g., dismissing all 'network' errors). |
 | **Duration** | How long the feedback persists. `null` duration usually means "until dismissed" (common for banners). |
 | **Persistence** | If a storage backend is configured, valid feedback events persist across app restarts. |
+| **Deduplication** | The `FeedbackManager` automatically deduplicates identical events (same type, message, and tags) that occur within a short window (def. 5 seconds) to prevent spamming the user. |
 
 ---
 
@@ -877,37 +963,71 @@ await FeedbackBus.dismissAll();
 
 ABUS is architected to support complex multi-app ecosystems. Using the `AndroidSharedStorage` backend, different apps (signed by the same certificate) can share state, synchronize interactions, and broadcast feedback events.
 
-### AndroidSharedStorage
+### AndroidSharedStorage Deep Dive
 
-This implementation uses a shared directory on the Android filesystem to exchange data. It employs file locking and content hashing to ensure data integrity and performance.
+This implementation uses a shared directory on the Android filesystem to exchange data. It acts as a shared bus where multiple applications can write and listen for changes.
+
+#### Internal Mechanism
+
+1.  **File Locking**: Uses `RandomAccessFile` with exclusive locking (`FileLock.exclusive`). This is critical for preventing race conditions. When App A writes to the storage, it acquires a lock, preventing App B from writing until A finishes.
+2.  **Content Hashing**: To optimize performance, the storage driver maintains a hash of the file content in memory. When polling for changes, it first reads the file and compares the hash. If the hash matches, no further parsing or event emission occurs.
+3.  **Atomic Writes**: Files are truncated and written in a single locked transaction to ensure that partial reads never happen.
+
+#### Usage
 
 ```dart
-// Configure storage in main()
-final storageDir = Directory('/sdcard/Android/data/com.example/files');
-final storage = AndroidSharedStorage(
-  storageDir,
-  syncInterval: Duration(seconds: 10), // Polling interval for changes
-);
+// Configure storage in main() - Do this before runApp
+void main() async {
+  // Use a path accessible to both apps (e.g., external storage or a shared user ID path)
+  final storageDir = Directory('/sdcard/Android/data/com.example/files');
+  
+  final storage = AndroidSharedStorage(
+    storageDir,
+    syncInterval: Duration(seconds: 10), // Polling interval for changes
+  );
 
-ABUS.setStorage(storage);
-await FeedbackBus.initialize(storage: storage);
+  // 1. Connect Storage to ABUS
+  ABUS.setStorage(storage);
+  
+  // 2. Initialize Feedback System with Storage
+  await FeedbackBus.initialize(storage: storage);
+  
+  runApp(MyApp());
+}
 ```
-
-### Key Capabilities
-
-1.  **File Locking**: Uses `RandomAccessFile` with exclusive locking. This prevents two apps from writing to the same file simultaneously, avoiding data corruption in high-concurrency scenarios.
-2.  **Smart Sync**: The storage system maintains a hash of the file content. It only triggers updates when the actual content changes, minimizing unnecessary parsing and UI rebuilds.
-3.  **Automatic Polling**: The `syncInterval` determines how often the app checks for external changes.
-4.  **Manual Sync**: You can force a sync operation using `FeedbackBus.sync()` or `storage.sync()` if you know an external change has occurred (e.g., via a platform channel event).
 
 ### Cross-App Workflow Example
 
-1.  **App A** (Foreground) and **App B** (Background Service) share the same `storageDir`.
-2.  **App B** completes a background sync and writes a `SnackbarEvent` to storage.
-3.  **App A**'s `AndroidSharedStorage` detects the new file during its poll cycle.
-4.  **App A** emits the event, and the user sees "Sync Completed" in the foreground app.
+Imagine a **Driver App** (Foreground) and a **Background Service App** (for tracking location/jobs).
+
+1.  **Service App**: Completes a long-running job and wants to notify the driver.
+    ```dart
+    // Service App
+    await FeedbackBus.showBanner(
+      message: "Job #123 Completed Successfully",
+      type: BannerType.success
+    );
+    // This event is serialized to JSON and written to the shared directory.
+    ```
+
+2.  **Driver App**: Is currently open but idle.
+    - Its `AndroidSharedStorage` background timer polls the file.
+    - Detects a change in the feedback queue file.
+    - Deserializes the new file content.
+    
+3.  **UI Update**:
+    - `FeedbackManager` in Driver App receives the updated queue.
+    - `FeedbackWidgetMixin` triggers a rebuild.
+    - The Driver sees the "Job #123 Completed" banner instantly without any manual refresh.
 
 ![Cross-App Flow](doc/cross_app_flow.png)
+
+### Troubleshooting Cross-App Issues
+
+-   **Permissions**: Ensure both apps have `READ_EXTERNAL_STORAGE` and `WRITE_EXTERNAL_STORAGE` permissions (or appropriate scoped storage access) to the shared directory.
+-   **Signing**: If using `Context.getExternalFilesDir()`, apps typically need to be signed by the same certificate to share data comfortably, or use a specific shared user ID.
+-   **Path**: Ensure the `storageDir` path is exactly the same string in both applications.
+-   **Delay**: The default sync interval is 10 seconds. For faster updates, reduce the `syncInterval` in the `AndroidSharedStorage` constructor, but be mindful of battery usage.
 
 ## Conclusion
 

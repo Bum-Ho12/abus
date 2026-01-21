@@ -1,7 +1,7 @@
 name: abus
 description: >
   ABUS (A-synchronous Business Unified System) is a unified approach to handling asynchronous operations and API interactions with built-in optimistic updates, rollback capabilities, and error handling.
-version: 0.0.6
+version: 0.0.7
 homepage: https://github.com/Bum-Ho12/abus
 repository: https://github.com/Bum-Ho12/abus
 issue_tracker: https://github.com/Bum-Ho12/abus/issues
